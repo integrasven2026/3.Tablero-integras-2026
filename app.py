@@ -173,12 +173,12 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
-# DICCIONARIO DE METAS DEL PROYECTO CON R1I2 ACTUALIZADO (90% de 982 = 884 personas)
+# DICCIONARIO DE METAS DEL PROYECTO ACTUALIZADO
 METAS_INDICADORES = {
     "R1I2": {"meta": 883.8, "tipo": "numero", "etiqueta": "90% de 982 (884 pers.)"},
     "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
-    "R1I4": {"meta": 0.75, "tipo": "porcentaje", "etiqueta": "75%"},
-    "R1I5": {"meta": 0.70, "tipo": "porcentaje", "etiqueta": "70%"},
+    "R1I4": {"meta": 4635, "tipo": "numero", "etiqueta": "75% de 6,180 (4,635 pers.)"},
+    "R1I5": {"meta": 916.3, "tipo": "numero", "etiqueta": "70% de 1,309 (916 pers.)"},
     "R1I6": {"meta": 0.90, "tipo": "porcentaje", "etiqueta": "90%"},
     "R2I1": {"meta": 8622, "tipo": "numero", "etiqueta": "8,622"},
     "R2I2": {"meta": 0.80, "tipo": "porcentaje", "etiqueta": "80%"},
