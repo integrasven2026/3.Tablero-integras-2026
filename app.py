@@ -10,16 +10,58 @@ import folium
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
-    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("📊 Tablero de Monitoreo - Consorcio Integras")
+st.title("Tablero de Monitoreo - Consorcio Integras")
 st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 st.markdown("---")
 
-# Diccionario de Mapeo de Indicadores Oficiales
+# Mapeo de Códigos a Nombres Reales (Estados y Municipios)
+MAPA_ESTADOS = {
+    "VE01": "Distrito Capital",
+    "VE07": "Bolívar",
+    "VE10": "Delta Amacuro",
+    "VE15": "Miranda",
+    "VE19": "Sucre",
+    "VE24": "La Guaira"
+}
+
+MAPA_MUNICIPIOS = {
+    "VE0101": "Libertador",
+    "VE0701": "Caroní",
+    "VE0707": "Angostura",
+    "VE1003": "Pedernales",
+    "VE1004": "Tucupita",
+    "VE1515": "Paz Castillo",
+    "VE1519": "Sucre (Miranda)",
+    "VE1520": "Urdaneta",
+    "VE1903": "Arismendi",
+    "VE1905": "Bermúdez",
+    "VE1908": "Cruz Salmerón Acosta",
+    "VE1914": "Sucre (Sucre)",
+    "VE2401": "Vargas"
+}
+
+# Coordenadas Geográficas de Municipios
+COORDENADAS_MUNICIPIOS = {
+    "Libertador": [10.5000, -66.9167],
+    "Caroní": [8.2833, -62.7167],
+    "Angostura": [7.5333, -63.8833],
+    "Pedernales": [9.9667, -62.2500],
+    "Tucupita": [9.0622, -62.0531],
+    "Paz Castillo": [10.2167, -66.6667],
+    "Sucre (Miranda)": [10.4833, -66.8167],
+    "Urdaneta": [10.1500, -66.8833],
+    "Arismendi": [10.7167, -62.5167],
+    "Bermúdez": [10.6333, -63.2500],
+    "Cruz Salmerón Acosta": [10.6167, -64.2000],
+    "Sucre (Sucre)": [10.2833, -63.8833],
+    "Vargas": [10.6000, -66.9333]
+}
+
+# Mapeo de Indicadores
 MAPA_INDICADORES = {
     "R1I2": "R1I2: Porcentaje de niños y cuidadores cuyas necesidades/riesgos urgentes de protección infantil se han abordado a través del proceso de gestión de casos.",
     "R1I3": "R1I3: Número de personas que accedieron a asistencia jurídica gratuita.",
@@ -70,7 +112,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
     registros_expandidos = []
     
     for row in data:
-        # Búsqueda flexible de Resultado / Sector
+        # Búsqueda y traducción de Sector
         sector_raw = str(row.get("Resultado") or row.get("group_datos_act/Resultado") or "").strip()
         sector_map = {
             "R1": "Protección",
@@ -81,7 +123,14 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         }
         sector_label = sector_map.get(sector_raw, sector_raw)
         
-        # Búsqueda flexible de Indicadores de resultados
+        # Traducir Estado y Municipio desde el código
+        estado_code = str(row.get("Estado") or row.get("group_datos_loc/Estado") or "").strip()
+        estado_label = MAPA_ESTADOS.get(estado_code, estado_code)
+        
+        muni_code = str(row.get("Municipio") or row.get("group_datos_loc/Municipio") or "").strip()
+        muni_label = MAPA_MUNICIPIOS.get(muni_code, muni_code)
+        
+        # Indicadores
         ind_val = row.get("Indicadores_resultados") or row.get("group_datos_act/Indicadores_resultados") or ""
         indicadores_raw = str(ind_val).split()
         indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
@@ -89,8 +138,8 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         base_info = {
             "_id": row.get("_id"),
             "Fecha": row.get("Fecha_de_la_Actividad") or row.get("group_datos_act/Fecha_de_la_Actividad"),
-            "Estado": row.get("Estado") or row.get("group_datos_loc/Estado"),
-            "Municipio": row.get("Municipio") or row.get("group_datos_loc/Municipio"),
+            "Estado": estado_label,
+            "Municipio": muni_label,
             "Comunidad": row.get("Comunidad") or row.get("group_datos_loc/Comunidad"),
             "ONG": row.get("ong") or row.get("group_datos_act/ong"),
             "Sector": sector_label,
@@ -129,26 +178,26 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
             
     return pd.DataFrame(registros_expandidos)
 
-# Cargar credenciales desde Secrets
+# Cargar credenciales
 try:
     KOBO_TOKEN = st.secrets["KOBO_TOKEN"]
     ASSET_ID = st.secrets["ASSET_ID"]
     df_raw = cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
 except Exception:
-    st.info("👋 Por favor, configura tu `KOBO_TOKEN` y `ASSET_ID` en **Advanced settings -> Secrets** dentro de Streamlit Cloud.")
+    st.info("Por favor, configura tu KOBO_TOKEN y ASSET_ID en Secrets.")
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES Y BOTÓN DE ACTUALIZACIÓN
+# 3. FILTROS LATERALES
 # -----------------------------------------------------------------------------
-st.sidebar.header("🔄 Sincronización en Tiempo Real")
+st.sidebar.header("Sincronización en Tiempo Real")
 
-if st.sidebar.button("🔄 Actualizar Datos Ahora"):
+if st.sidebar.button("Actualizar Datos Ahora"):
     st.cache_data.clear()
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.header("🔍 Filtros de Consulta")
+st.sidebar.header("Filtros de Consulta")
 
 if df_raw.empty:
     st.warning("No se encontraron registros en el formulario de KoboToolbox.")
@@ -167,7 +216,7 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp)
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp)
 
-# Aplicar filtros base
+# Aplicar filtros
 df_filtered = df_raw.copy()
 if socio_sel != "Todos":
     df_filtered = df_filtered[df_filtered["ONG"] == socio_sel]
@@ -179,7 +228,7 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS CLAVE (KPIs)
+# 4. MÉTRICAS CLAVE
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
 
@@ -199,9 +248,9 @@ col5.metric("Sectores", df_filtered["Sector"].nunique() if total_impactados > 0 
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 5. GRUPOS DE PARTICIPANTES (% MUJERES, HOMBRES, NIÑAS, NIÑOS)
+# 5. GRUPOS DE PARTICIPANTES
 # -----------------------------------------------------------------------------
-st.subheader("👥 Grupos de Participantes")
+st.subheader("Grupos de Participantes")
 
 if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
     counts = df_filtered["Grupo_Demografico"].value_counts()
@@ -220,9 +269,9 @@ if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES (VALOR ABSOLUTO Y PORCENTAJE)
+# 6. TABLA DESGLOSE DE INDICADORES
 # -----------------------------------------------------------------------------
-st.subheader("🎯 Desglose de Indicadores del Proyecto")
+st.subheader("Desglose de Indicadores del Proyecto")
 
 if total_impactados > 0:
     records_ind = []
@@ -246,19 +295,16 @@ if total_impactados > 0:
             
     df_ind_flat = pd.DataFrame(records_ind)
     
-    # Agrupación y cálculo de porcentaje
     summary_ind = df_ind_flat.groupby(["Sector", "Indicador"]).agg(
         Valor_Absoluto=("ID_Unico", "count"),
         Participantes_Unicos=("ID_Unico", "nunique")
     ).reset_index()
     
-    # Porcentaje respecto al total de impactados filtrados
     summary_ind["Porcentaje (%)"] = (summary_ind["Valor_Absoluto"] / total_impactados) * 100
     summary_ind["Porcentaje (%)"] = summary_ind["Porcentaje (%)"].map("{:.1f}%".format)
     
     summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
     
-    # Presentación final en tabla limpia
     st.dataframe(
         summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
             "Sector": "Sector",
@@ -274,20 +320,23 @@ if total_impactados > 0:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (BARRAS Y TORTA)
+# 7. GRÁFICOS INTERACTIVOS (CON VALOR ABSOLUTO Y PORCENTAJE)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
 
 with g1:
-    st.subheader("📊 Desglose por Sexo y Rango Etario")
+    st.subheader("Desglose por Sexo y Rango Etario")
     if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
         df_demo = df_filtered.groupby("Grupo_Demografico").size().reset_index(name="Cantidad")
+        df_demo["Porcentaje"] = (df_demo["Cantidad"] / total_impactados) * 100
+        df_demo["Etiqueta"] = df_demo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
+        
         fig_bar = px.bar(
             df_demo, 
             x="Grupo_Demografico", 
             y="Cantidad", 
             color="Grupo_Demografico",
-            text="Cantidad",
+            text="Etiqueta",
             title="Participantes por Rango Etario y Sexo",
             color_discrete_sequence=px.colors.qualitative.Set2
         )
@@ -295,7 +344,7 @@ with g1:
         st.plotly_chart(fig_bar, use_container_width=True)
 
 with g2:
-    st.subheader("🥧 Participantes Únicos por Sector")
+    st.subheader("Participantes Únicos por Sector")
     if total_impactados > 0 and "Sector" in df_filtered.columns:
         df_sec_unicos = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"])
         df_sec_cnt = df_sec_unicos["Sector"].value_counts().reset_index()
@@ -309,14 +358,16 @@ with g2:
             title="Distribución por Sector de Implementación",
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
+        # Mostrar valor absoluto y porcentaje simultáneamente en la torta
+        fig_pie.update_traces(textinfo="label+value+percent")
         st.plotly_chart(fig_pie, use_container_width=True)
 
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 8. UBICACIÓN GEOGRÁFICA Y BARRAS POR MUNICIPIO
+# 8. UBICACIÓN GEOGRÁFICA Y MAPA DETALLADO CON SECTOR E IMPACTADOS
 # -----------------------------------------------------------------------------
-st.subheader("🗺️ Ubicación Geográfica por Municipio")
+st.subheader("Ubicación Geográfica por Municipio")
 
 m1, m2 = st.columns([1, 1])
 
@@ -324,6 +375,8 @@ with m1:
     st.markdown("### Participantes Impactados por Municipio")
     if total_impactados > 0 and "Municipio" in df_filtered.columns:
         df_muni = df_filtered.groupby(["Estado", "Municipio"]).size().reset_index(name="Impactados")
+        df_muni["Porcentaje"] = (df_muni["Impactados"] / total_impactados) * 100
+        df_muni["Etiqueta"] = df_muni.apply(lambda r: f"{r['Impactados']} ({r['Porcentaje']:.1f}%)", axis=1)
         df_muni = df_muni.sort_values(by="Impactados", ascending=True)
         
         fig_muni = px.bar(
@@ -332,7 +385,7 @@ with m1:
             x="Impactados",
             color="Estado",
             orientation="h",
-            text="Impactados",
+            text="Etiqueta",
             height=400
         )
         fig_muni.update_traces(textposition="outside")
@@ -340,5 +393,45 @@ with m1:
 
 with m2:
     st.markdown("### Cobertura de la Intervención")
+    
     mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
+    
+    if total_impactados > 0:
+        # Agrupar por Estado, Municipio y Sector para el desglose del Mapa
+        mapa_df = df_filtered.groupby(["Estado", "Municipio", "Sector"]).size().reset_index(name="Cantidad")
+        
+        muni_totales = df_filtered.groupby(["Estado", "Municipio"]).size().reset_index(name="Total_Impactados")
+        
+        for idx, m_row in muni_totales.iterrows():
+            est = m_row["Estado"]
+            mun = m_row["Municipio"]
+            tot = m_row["Total_Impactados"]
+            
+            coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
+            
+            # Construir resumen de sectores para el popup
+            sectores_muni = mapa_df[(mapa_df["Estado"] == est) & (mapa_df["Municipio"] == mun)]
+            sec_html = "".join([f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas</li>" for _, r in sectores_muni.iterrows()])
+            
+            popup_content = f"""
+            <div style='font-family: Arial; font-size: 12px; width: 200px;'>
+                <h4 style='margin-bottom: 5px; color: #1f77b4;'>{mun}</h4>
+                <b>Estado:</b> {est}<br>
+                <b>Total Impactados:</b> {tot}<br><br>
+                <b>Desglose por Sector:</b>
+                <ul style='margin-top: 5px; padding-left: 15px;'>
+                    {sec_html}
+                </ul>
+            </div>
+            """
+            
+            folium.CircleMarker(
+                location=coords,
+                radius=min(tot * 3, 20) + 6,
+                popup=folium.Popup(popup_content, max_width=250),
+                color="#1f77b4",
+                fill=True,
+                fill_opacity=0.7
+            ).add_to(mapa)
+            
     st_folium(mapa, width=500, height=380)
