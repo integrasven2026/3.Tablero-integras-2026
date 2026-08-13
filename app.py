@@ -70,8 +70,15 @@ with col_header_title:
     st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 
 with col_header_logo:
-    # Búsqueda flexible del archivo del logo
-    posibles_nombres = ["Integras_logo.jpg", "Integras_logo.png", "integras_logo.jpg", "integras_logo.png", "Integras_logo.jpeg"]
+    # Búsqueda del archivo integras.jpg detectado en tu repositorio
+    posibles_nombres = [
+        "integras.jpg", 
+        "Integras.jpg", 
+        "Integras_logo.jpg", 
+        "integras_logo.jpg", 
+        "Integras_logo.png", 
+        "integras_logo.png"
+    ]
     logo_path = None
     
     for nombre in posibles_nombres:
@@ -79,13 +86,19 @@ with col_header_logo:
             logo_path = nombre
             break
 
+    # URL directa de respaldo a tu GitHub
+    URL_LOGO_GITHUB = "https://raw.githubusercontent.com/integrasven2026/3.Tablero-integras-2026/main/integras.jpg"
+
     if logo_path:
         try:
             st.image(logo_path, use_container_width=True)
         except TypeError:
             st.image(logo_path, use_column_width=True)
     else:
-        st.warning("⚠️ Coloque el archivo 'Integras_logo.jpg' en la misma carpeta del script.")
+        try:
+            st.image(URL_LOGO_GITHUB, use_container_width=True)
+        except Exception:
+            st.warning("⚠️ No se pudo cargar el logo 'integras.jpg'.")
 
 st.markdown("---")
 
