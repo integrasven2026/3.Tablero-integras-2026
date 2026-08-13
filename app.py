@@ -173,7 +173,7 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
-# DICCIONARIO DE METAS DEL PROYECTO POR CÓDIGO Y INDICADOR
+# DICCIONARIO DE METAS DEL PROYECTO
 METAS_INDICADORES = {
     "R1I2": {"meta": 0.90, "tipo": "porcentaje", "etiqueta": "90%"},
     "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
@@ -274,7 +274,16 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                     b_info["ID_Unico"] = f"REG_{row.get('_id')}_{idx_b}"
 
                 sexo_raw = str(b.get("group_beneficiario/Sexo", "")).lower().strip()
-                b_info["Sexo"] = sexo_raw
+                
+                # Normalización del campo Sexo
+                if sexo_raw in ["femenino", "f", "mujer"]:
+                    sexo_norm = "Mujer"
+                elif sexo_raw in ["masculino", "m", "hombre"]:
+                    sexo_norm = "Hombre"
+                else:
+                    sexo_norm = "Otro / No Especificado"
+                    
+                b_info["Sexo"] = sexo_norm
                 
                 try:
                     edad = float(b.get("group_beneficiario/edad_", 0))
@@ -283,9 +292,9 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                 b_info["Edad"] = edad
                 
                 if edad < 18:
-                    b_info["Grupo_Demografico"] = "Niña" if sexo_raw in ["femenino", "f", "mujer"] else "Niño"
+                    b_info["Grupo_Demografico"] = "Niña" if sexo_norm == "Mujer" else "Niño"
                 else:
-                    b_info["Grupo_Demografico"] = "Mujer" if sexo_raw in ["femenino", "f", "mujer"] else "Hombre"
+                    b_info["Grupo_Demografico"] = "Mujer" if sexo_norm == "Mujer" else "Hombre"
 
                 discapacidad_val = str(b.get("group_beneficiario/discapacidad", b.get("group_beneficiario/Discapacidad", ""))).lower().strip()
                 indigena_val = str(b.get("group_beneficiario/indigena", b.get("group_beneficiario/Indigena", ""))).lower().strip()
@@ -301,6 +310,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         else:
             base_info["CodigoID"] = f"ROW_{row.get('_id')}"
             base_info["ID_Unico"] = f"ROW_{row.get('_id')}"
+            base_info["Sexo"] = "Otro / No Especificado"
             base_info["Es_Discapacidad"] = 0
             base_info["Es_Indigena"] = 0
             base_info["Es_Embarazada_Lactante"] = 0
@@ -329,7 +339,7 @@ except Exception:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES CON BOTÓN DE LIMPIEZA
+# 3. FILTROS LATERALES CON BOTÓN DE LIMPIEZA Y FILTRO POR SEXO
 # -----------------------------------------------------------------------------
 st.sidebar.header("Sincronización en Tiempo Real")
 
@@ -345,6 +355,7 @@ if "f_socio" not in st.session_state: st.session_state.f_socio = "Todos"
 if "f_estado" not in st.session_state: st.session_state.f_estado = "Todos"
 if "f_muni" not in st.session_state: st.session_state.f_muni = "Todos"
 if "f_sector" not in st.session_state: st.session_state.f_sector = "Todos"
+if "f_sexo" not in st.session_state: st.session_state.f_sexo = "Todos"
 
 def borrar_filtros():
     st.session_state.f_mes = "Todos"
@@ -352,6 +363,7 @@ def borrar_filtros():
     st.session_state.f_estado = "Todos"
     st.session_state.f_muni = "Todos"
     st.session_state.f_sector = "Todos"
+    st.session_state.f_sexo = "Todos"
 
 with col_btn2:
     st.button("🧹 Limpiar Filtros", on_click=borrar_filtros, use_container_width=True)
@@ -383,6 +395,10 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
+# FILTRO DE SEXO (HOMBRE / MUJER)
+sexo_disp = ["Todos", "Hombre", "Mujer"]
+sexo_sel = st.sidebar.selectbox("Sexo del Participante:", sexo_disp, key="f_sexo")
+
 # Aplicar Filtros
 df_filtered = df_raw.copy()
 if mes_sel != "Todos":
@@ -395,6 +411,8 @@ if muni_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Municipio"] == muni_sel]
 if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
+if sexo_sel != "Todos":
+    df_filtered = df_filtered[df_filtered["Sexo"] == sexo_sel]
 
 # -----------------------------------------------------------------------------
 # 4. MÉTRICAS CLAVE
@@ -452,7 +470,7 @@ ne4.metric("Población LGBTIQ+", f"{cnt_lgbtiq:,}", f"{p_lgbtiq:.1f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES CON METAS Y % DE ALCANCE
+# 6. TABLA DESGLOSE DE INDICADORES (SIN COLUMNA "PARTICIPANTES ÚNICOS")
 # -----------------------------------------------------------------------------
 st.subheader("Desglose de Indicadores del Proyecto")
 
@@ -487,7 +505,6 @@ if total_impactados > 0:
     
     summary_ind["Porcentaje_Total"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
     
-    # Mapeo de Metas y Cálculo de % Alcance del Indicador
     def obtener_meta_info(cod):
         meta_data = METAS_INDICADORES.get(cod)
         if meta_data:
@@ -504,11 +521,9 @@ if total_impactados > 0:
         
         if valor_meta and valor_meta > 0:
             if tipo_meta == "numero":
-                # Alcance sobre el total acumulado de participantes únicos vs Meta
                 alcance = (row_ind["Participantes_Unicos"] / valor_meta) * 100
                 alcance_porcentajes.append(f"{alcance:.1f}%")
             elif tipo_meta == "porcentaje":
-                # Para metas en porcentaje se refleja el cumplimiento directo
                 alcance_porcentajes.append(f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})")
         else:
             alcance_porcentajes.append("N/A")
@@ -517,14 +532,14 @@ if total_impactados > 0:
     summary_ind["% Alcance del Indicador"] = alcance_porcentajes
     summary_ind["% del Total"] = summary_ind["Porcentaje_Total"].map("{:.1f}%".format)
     
-    summary_ind = summary_ind.sort_values(by=["Sector", "Participantes_Unicos"], ascending=[True, False])
+    summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
     
+    # SE ELIMINÓ "Participantes_Unicos" DE LAS COLUMNAS MOSTRADAS
     cols_ordenadas = [
         "Sector", 
         "Indicador", 
         "Valor_Absoluto", 
         "% del Total", 
-        "Participantes_Unicos", 
         "Meta del Proyecto", 
         "% Alcance del Indicador"
     ]
@@ -534,7 +549,6 @@ if total_impactados > 0:
         "Indicador": "Indicador del Proyecto",
         "Valor_Absoluto": "Valor Absoluto (Impactados)",
         "% del Total": "% del Total",
-        "Participantes_Unicos": "Participantes Únicos",
         "Meta del Proyecto": "Meta del Proyecto",
         "% Alcance del Indicador": "% Alcance del Indicador"
     })
