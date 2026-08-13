@@ -5,6 +5,7 @@ import plotly.express as px
 from streamlit_folium import st_folium
 import folium
 import os
+import io
 
 # -----------------------------------------------------------------------------
 # PALETA DE COLORES OFICIAL CONSORCIO INTEGRAS
@@ -28,24 +29,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inyección de Fuentes: Quicksand y Now (o Montserrat como fallback de Now)
+# Inyección de Fuentes: Quicksand y Now (o Montserrat como fallback)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Quicksand:wght@600;700&display=swap');
 
-    /* Aplicar Quicksand Bold a todo el cuerpo de la aplicación */
     html, body, [class*="css"], .stMarkdown, p, div, span, label, input, button {
         font-family: 'Quicksand', sans-serif !important;
         font-weight: 700 !important;
     }
 
-    /* Tipografía para los Títulos principales y subsecciones (Now Bold / Montserrat) */
     h1, h2, h3, h4, h5, h6, .stSubheader {
         font-family: 'Now', 'Montserrat', sans-serif !important;
         font-weight: 700 !important;
     }
 
-    /* Personalización del Título Principal */
     .titulo-principal {
         font-family: 'Now', 'Montserrat', sans-serif !important;
         color: #17C3B2 !important;
@@ -62,7 +60,6 @@ st.markdown("""
 col_header_title, col_header_logo = st.columns([3, 1])
 
 with col_header_title:
-    # Título principal en color Azul Agua Marina (#17C3B2) con fuente Now Bold
     st.markdown(
         f"<h1 class='titulo-principal'>Tablero de Monitoreo - Consorcio Integras</h1>", 
         unsafe_allow_html=True
@@ -70,7 +67,6 @@ with col_header_title:
     st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 
 with col_header_logo:
-    # Búsqueda del archivo integras.jpg detectado en tu repositorio
     posibles_nombres = [
         "integras.jpg", 
         "Integras.jpg", 
@@ -86,7 +82,6 @@ with col_header_logo:
             logo_path = nombre
             break
 
-    # URL directa de respaldo a tu GitHub
     URL_LOGO_GITHUB = "https://raw.githubusercontent.com/integrasven2026/3.Tablero-integras-2026/main/integras.jpg"
 
     if logo_path:
@@ -105,14 +100,12 @@ st.markdown("---")
 # META TOTAL DEL PROYECTO
 META_PARTICIPANTES_UNICOS = 46122
 
-# Diccionario de Meses en Español
 MESES_ES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
     5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
     9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 }
 
-# Mapeo de Códigos a Nombres Reales (Estados y Municipios)
 MAPA_ESTADOS = {
     "VE01": "Distrito Capital",
     "VE07": "Bolívar",
@@ -261,9 +254,24 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                     b_info["Grupo_Demografico"] = "Niña" if sexo_raw in ["femenino", "f", "mujer"] else "Niño"
                 else:
                     b_info["Grupo_Demografico"] = "Mujer" if sexo_raw in ["femenino", "f", "mujer"] else "Hombre"
-                
+
+                # Extracción de Necesidades Específicas
+                discapacidad_val = str(b.get("group_beneficiario/discapacidad", b.get("group_beneficiario/Discapacidad", ""))).lower().strip()
+                indigena_val = str(b.get("group_beneficiario/indigena", b.get("group_beneficiario/Indigena", ""))).lower().strip()
+                emb_lact_val = str(b.get("group_beneficiario/embarazada_lactante", b.get("group_beneficiario/Embarazada_Lactante", ""))).lower().strip()
+                lgbtiq_val = str(b.get("group_beneficiario/lgbtiq", b.get("group_beneficiario/LGBTIQ", ""))).lower().strip()
+
+                b_info["Es_Discapacidad"] = 1 if discapacidad_val in ["si", "yes", "1", "s"] else 0
+                b_info["Es_Indigena"] = 1 if indigena_val in ["si", "yes", "1", "s"] else 0
+                b_info["Es_Embarazada_Lactante"] = 1 if emb_lact_val in ["si", "yes", "1", "s", "embarazada", "lactante"] else 0
+                b_info["Es_LGBTIQ"] = 1 if lgbtiq_val in ["si", "yes", "1", "s"] else 0
+
                 registros_expandidos.append(b_info)
         else:
+            base_info["Es_Discapacidad"] = 0
+            base_info["Es_Indigena"] = 0
+            base_info["Es_Embarazada_Lactante"] = 0
+            base_info["Es_LGBTIQ"] = 0
             registros_expandidos.append(base_info)
             
     df = pd.DataFrame(registros_expandidos)
@@ -288,13 +296,34 @@ except Exception:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES
+# 3. FILTROS LATERALES CON BOTÓN DE LIMPIEZA / BORRADO
 # -----------------------------------------------------------------------------
 st.sidebar.header("Sincronización en Tiempo Real")
 
-if st.sidebar.button("Actualizar Datos Ahora"):
-    st.cache_data.clear()
-    st.rerun()
+col_btn1, col_btn2 = st.sidebar.columns(2)
+
+with col_btn1:
+    if st.button("🔄 Actualizar", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+# Inicialización de estado de sesión para filtros
+if "f_mes" not in st.session_state: st.session_state.f_mes = "Todos"
+if "f_socio" not in st.session_state: st.session_state.f_socio = "Todos"
+if "f_estado" not in st.session_state: st.session_state.f_estado = "Todos"
+if "f_muni" not in st.session_state: st.session_state.f_muni = "Todos"
+if "f_sector" not in st.session_state: st.session_state.f_sector = "Todos"
+
+# Función para reiniciar los filtros
+def borrar_filtros():
+    st.session_state.f_mes = "Todos"
+    st.session_state.f_socio = "Todos"
+    st.session_state.f_estado = "Todos"
+    st.session_state.f_muni = "Todos"
+    st.session_state.f_sector = "Todos"
+
+with col_btn2:
+    st.button("🧹 Limpiar Filtros", on_click=borrar_filtros, use_container_width=True)
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtros de Consulta")
@@ -308,20 +337,20 @@ meses_ordenados = sorted([m for m in df_raw["Mes_Reporte"].unique() if m != "Sin
 if "Sin Fecha" in df_raw["Mes_Reporte"].values:
     meses_ordenados.append("Sin Fecha")
 meses_disp = ["Todos"] + meses_ordenados
-mes_sel = st.sidebar.selectbox("Mes del Reporte:", meses_disp)
+mes_sel = st.sidebar.selectbox("Mes del Reporte:", meses_disp, key="f_mes")
 
 socios_disp = ["Todos"] + sorted([x for x in df_raw["ONG"].dropna().unique() if x])
-socio_sel = st.sidebar.selectbox("Socio / ONG:", socios_disp)
+socio_sel = st.sidebar.selectbox("Socio / ONG:", socios_disp, key="f_socio")
 
 estados_disp = ["Todos"] + sorted([x for x in df_raw["Estado"].dropna().unique() if x])
-estado_sel = st.sidebar.selectbox("Estado:", estados_disp)
+estado_sel = st.sidebar.selectbox("Estado:", estados_disp, key="f_estado")
 
 df_temp = df_raw if estado_sel == "Todos" else df_raw[df_raw["Estado"] == estado_sel]
 munis_disp = ["Todos"] + sorted([x for x in df_temp["Municipio"].dropna().unique() if x])
-muni_sel = st.sidebar.selectbox("Municipio:", munis_disp)
+muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
 
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
-sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp)
+sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
 # Aplicar Filtros
 df_filtered = df_raw.copy()
@@ -357,9 +386,9 @@ col3.metric("% Alcance de la Meta (46.122 pers.)", f"{pct_meta:.2f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 5. GRUPOS DE PARTICIPANTES
+# 5. GRUPOS DE PARTICIPANTES Y PERSONAS CON NECESIDADES ESPECÍFICAS
 # -----------------------------------------------------------------------------
-st.subheader("Grupos de Participantes")
+st.subheader("Grupos Demográficos y Necesidades Específicas")
 
 if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
     counts = df_filtered["Grupo_Demografico"].value_counts()
@@ -375,10 +404,28 @@ if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
     d3.metric("% Niñas (<18 años)", f"{p_ninas:.1f}%")
     d4.metric("% Niños (<18 años)", f"{p_ninos:.1f}%")
 
+st.markdown("#### Personas con Necesidades Específicas")
+
+cnt_disc = int(df_filtered["Es_Discapacidad"].sum()) if "Es_Discapacidad" in df_filtered.columns else 0
+cnt_indig = int(df_filtered["Es_Indigena"].sum()) if "Es_Indigena" in df_filtered.columns else 0
+cnt_emb = int(df_filtered["Es_Embarazada_Lactante"].sum()) if "Es_Embarazada_Lactante" in df_filtered.columns else 0
+cnt_lgbtiq = int(df_filtered["Es_LGBTIQ"].sum()) if "Es_LGBTIQ" in df_filtered.columns else 0
+
+p_disc = (cnt_disc / total_impactados * 100) if total_impactados > 0 else 0
+p_indig = (cnt_indig / total_impactados * 100) if total_impactados > 0 else 0
+p_emb = (cnt_emb / total_impactados * 100) if total_impactados > 0 else 0
+p_lgbtiq = (cnt_lgbtiq / total_impactados * 100) if total_impactados > 0 else 0
+
+ne1, ne2, ne3, ne4 = st.columns(4)
+ne1.metric("Personas con Discapacidad", f"{cnt_disc:,}", f"{p_disc:.1f}%")
+ne2.metric("Comunidad Indígena", f"{cnt_indig:,}", f"{p_indig:.1f}%")
+ne3.metric("Embarazada / Lactante", f"{cnt_emb:,}", f"{p_emb:.1f}%")
+ne4.metric("Población LGBTIQ+", f"{cnt_lgbtiq:,}", f"{p_lgbtiq:.1f}%")
+
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES
+# 6. TABLA DESGLOSE DE INDICADORES CON DESCARGA EN EXCEL
 # -----------------------------------------------------------------------------
 st.subheader("Desglose de Indicadores del Proyecto")
 
@@ -414,16 +461,31 @@ if total_impactados > 0:
     
     summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
     
+    df_mostrar = summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
+        "Sector": "Sector",
+        "Indicador": "Indicador del Proyecto",
+        "Valor_Absoluto": "Valor Absoluto (Impactados)",
+        "Porcentaje (%)": "% del Total",
+        "Participantes_Unicos": "Participantes Únicos"
+    })
+    
     st.dataframe(
-        summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
-            "Sector": "Sector",
-            "Indicador": "Indicador del Proyecto",
-            "Valor_Absoluto": "Valor Absoluto (Impactados)",
-            "Porcentaje (%)": "% del Total",
-            "Participantes_Unicos": "Participantes Únicos"
-        }),
+        df_mostrar,
         use_container_width=True,
         hide_index=True
+    )
+
+    # Generar descarga en Excel en memoria
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_mostrar.to_excel(writer, index=False, sheet_name='Indicadores')
+    buffer.seek(0)
+
+    st.download_button(
+        label="📥 Descargar Desglose de Indicadores en Excel",
+        data=buffer,
+        file_name="Desglose_Indicadores_Consorcio_Integras.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 st.markdown("---")
