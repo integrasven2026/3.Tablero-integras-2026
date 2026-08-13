@@ -136,14 +136,22 @@ except Exception:
     st.info("👋 Por favor, configura tu `KOBO_TOKEN` y `ASSET_ID` en **Advanced settings -> Secrets** dentro de Streamlit Cloud.")
     st.stop()
 
+# -----------------------------------------------------------------------------
+# 3. FILTROS LATERALES Y BOTÓN DE ACTUALIZACIÓN
+# -----------------------------------------------------------------------------
+st.sidebar.header("🔄 Sincronización en Tiempo Real")
+
+# BOTÓN DE ACTUALIZACIÓN MANUAL EN TIEMPO REAL
+if st.sidebar.button("🔄 Actualizar Datos Ahora"):
+    st.cache_data.clear()
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.header("🔍 Filtros de Consulta")
+
 if df_raw.empty:
     st.warning("No se encontraron registros en el formulario de KoboToolbox.")
     st.stop()
-
-# -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES
-# -----------------------------------------------------------------------------
-st.sidebar.header("🔍 Filtros de Consulta")
 
 socios_disp = ["Todos"] + sorted([x for x in df_raw["ONG"].dropna().unique() if x])
 socio_sel = st.sidebar.selectbox("Socio / ONG:", socios_disp)
@@ -216,7 +224,6 @@ st.markdown("---")
 st.subheader("🎯 Reporte y Desglose por Indicador de Proyecto")
 
 if total_impactados > 0:
-    # Aplanar los indicadores seleccionados para cada registro
     records_ind = []
     for idx, row in df_filtered.iterrows():
         codigos = row.get("Indicadores_Codigos", [])
@@ -240,13 +247,11 @@ if total_impactados > 0:
             
     df_ind_flat = pd.DataFrame(records_ind)
     
-    # Resumen por Indicador
     summary_ind = df_ind_flat.groupby("Indicador").agg(
         Impactados=("ID_Unico", "count"),
         Participantes_Unicos=("ID_Unico", "nunique")
     ).reset_index().sort_values(by="Impactados", ascending=False)
     
-    # Grafico de Barras de Indicadores
     fig_ind = px.bar(
         summary_ind,
         y="Indicador",
@@ -262,7 +267,6 @@ if total_impactados > 0:
     fig_ind.update_layout(yaxis={"autorange": "reversed"})
     st.plotly_chart(fig_ind, use_container_width=True)
     
-    # Tabla Detallada de Indicadores
     st.markdown("#### 📋 Resumen Detallado de Indicadores")
     st.dataframe(
         summary_ind.rename(columns={
