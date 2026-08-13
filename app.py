@@ -141,7 +141,6 @@ except Exception:
 # -----------------------------------------------------------------------------
 st.sidebar.header("🔄 Sincronización en Tiempo Real")
 
-# BOTÓN DE ACTUALIZACIÓN MANUAL EN TIEMPO REAL
 if st.sidebar.button("🔄 Actualizar Datos Ahora"):
     st.cache_data.clear()
     st.rerun()
@@ -219,57 +218,58 @@ if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. SECCIÓN DESGLOSE DE INDICADORES DEL PROYECTO
+# 6. SECCIÓN DESGLOSE DE INDICADORES DEL PROYECTO CON SECTOR
 # -----------------------------------------------------------------------------
-st.subheader("🎯 Reporte y Desglose por Indicador de Proyecto")
+st.subheader("🎯 Reporte y Desglose por Sector e Indicador de Proyecto")
 
 if total_impactados > 0:
     records_ind = []
     for idx, row in df_filtered.iterrows():
         codigos = row.get("Indicadores_Codigos", [])
+        sector_actual = row.get("Sector", "Sin Sector")
+        
         if isinstance(codigos, list) and len(codigos) > 0:
             for cod in codigos:
                 records_ind.append({
                     "Codigo": cod,
+                    "Sector": sector_actual,
                     "Indicador": MAPA_INDICADORES.get(cod, cod),
-                    "ID_Unico": row.get("ID_Unico"),
-                    "ONG": row.get("ONG"),
-                    "Sector": row.get("Sector")
+                    "ID_Unico": row.get("ID_Unico")
                 })
         else:
             records_ind.append({
                 "Codigo": "Sin Indicador",
-                "Indicador": "Sin Indicador",
-                "ID_Unico": row.get("ID_Unico"),
-                "ONG": row.get("ONG"),
-                "Sector": row.get("Sector")
+                "Sector": sector_actual,
+                "Indicador": f"Sin Indicador ({sector_actual})",
+                "ID_Unico": row.get("ID_Unico")
             })
             
     df_ind_flat = pd.DataFrame(records_ind)
     
-    summary_ind = df_ind_flat.groupby("Indicador").agg(
+    summary_ind = df_ind_flat.groupby(["Sector", "Indicador"]).agg(
         Impactados=("ID_Unico", "count"),
         Participantes_Unicos=("ID_Unico", "nunique")
-    ).reset_index().sort_values(by="Impactados", ascending=False)
+    ).reset_index().sort_values(by=["Sector", "Impactados"], ascending=[True, False])
     
     fig_ind = px.bar(
         summary_ind,
         y="Indicador",
         x="Impactados",
+        color="Sector",
         orientation="h",
         text="Impactados",
-        title="Alcance Total de Impactados por Indicador",
-        color="Impactados",
-        color_continuous_scale="Viridis",
-        height=max(350, len(summary_ind) * 35)
+        title="Alcance Total por Sector e Indicador",
+        color_discrete_sequence=px.colors.qualitative.Set2,
+        height=max(380, len(summary_ind) * 40)
     )
     fig_ind.update_traces(textposition="outside")
     fig_ind.update_layout(yaxis={"autorange": "reversed"})
     st.plotly_chart(fig_ind, use_container_width=True)
     
-    st.markdown("#### 📋 Resumen Detallado de Indicadores")
+    st.markdown("#### 📋 Resumen Detallado por Sector e Indicador")
     st.dataframe(
-        summary_ind.rename(columns={
+        summary_ind[["Sector", "Indicador", "Impactados", "Participantes_Unicos"]].rename(columns={
+            "Sector": "Sector de Implementación",
             "Indicador": "Nombre / Descripción del Indicador",
             "Impactados": "Total Registros/Impactados",
             "Participantes_Unicos": "Participantes Únicos"
