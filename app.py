@@ -70,7 +70,8 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
     registros_expandidos = []
     
     for row in data:
-        sector_raw = str(row.get("Resultado", "")).strip()
+        # Búsqueda flexible de Resultado / Sector
+        sector_raw = str(row.get("Resultado") or row.get("group_datos_act/Resultado") or "").strip()
         sector_map = {
             "R1": "Protección",
             "R2": "Salud",
@@ -80,21 +81,22 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         }
         sector_label = sector_map.get(sector_raw, sector_raw)
         
-        # Procesar selección múltiple de indicadores
-        indicadores_raw = str(row.get("Indicadores_resultados", "")).split()
+        # Búsqueda flexible de Indicadores de resultados
+        ind_val = row.get("Indicadores_resultados") or row.get("group_datos_act/Indicadores_resultados") or ""
+        indicadores_raw = str(ind_val).split()
         indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
         
         base_info = {
             "_id": row.get("_id"),
-            "Fecha": row.get("Fecha_de_la_Actividad"),
-            "Estado": row.get("Estado"),
-            "Municipio": row.get("Municipio"),
-            "Comunidad": row.get("Comunidad"),
-            "ONG": row.get("ong"),
+            "Fecha": row.get("Fecha_de_la_Actividad") or row.get("group_datos_act/Fecha_de_la_Actividad"),
+            "Estado": row.get("Estado") or row.get("group_datos_loc/Estado"),
+            "Municipio": row.get("Municipio") or row.get("group_datos_loc/Municipio"),
+            "Comunidad": row.get("Comunidad") or row.get("group_datos_loc/Comunidad"),
+            "ONG": row.get("ong") or row.get("group_datos_act/ong"),
             "Sector": sector_label,
-            "Actividad": row.get("Actividad"),
+            "Actividad": row.get("Actividad") or row.get("group_datos_act/Actividad"),
             "Indicadores_Codigos": indicadores_raw,
-            "Indicadores_Texto": " | ".join(indicadores_labels) if indicadores_labels else "Sin Indicador"
+            "Indicadores_Texto": " | ".join(indicadores_labels) if indicadores_labels else "Sin indicador"
         }
         
         beneficiarios = row.get("group_beneficiario", [])
@@ -218,9 +220,9 @@ if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. SECCIÓN DESGLOSE DE INDICADORES DEL PROYECTO CON SECTOR
+# 6. TABLA DESGLOSE DE INDICADORES (VALOR ABSOLUTO Y PORCENTAJE)
 # -----------------------------------------------------------------------------
-st.subheader("🎯 Reporte y Desglose por Sector e Indicador de Proyecto")
+st.subheader("🎯 Desglose de Indicadores del Proyecto")
 
 if total_impactados > 0:
     records_ind = []
@@ -231,50 +233,42 @@ if total_impactados > 0:
         if isinstance(codigos, list) and len(codigos) > 0:
             for cod in codigos:
                 records_ind.append({
-                    "Codigo": cod,
                     "Sector": sector_actual,
                     "Indicador": MAPA_INDICADORES.get(cod, cod),
                     "ID_Unico": row.get("ID_Unico")
                 })
         else:
             records_ind.append({
-                "Codigo": "Sin Indicador",
                 "Sector": sector_actual,
-                "Indicador": f"Sin Indicador ({sector_actual})",
+                "Indicador": f"Sin indicador ({sector_actual})",
                 "ID_Unico": row.get("ID_Unico")
             })
             
     df_ind_flat = pd.DataFrame(records_ind)
     
+    # Agrupación y cálculo de porcentaje
     summary_ind = df_ind_flat.groupby(["Sector", "Indicador"]).agg(
-        Impactados=("ID_Unico", "count"),
+        Valor_Absoluto=("ID_Unico", "count"),
         Participantes_Unicos=("ID_Unico", "nunique")
-    ).reset_index().sort_values(by=["Sector", "Impactados"], ascending=[True, False])
+    ).reset_index()
     
-    fig_ind = px.bar(
-        summary_ind,
-        y="Indicador",
-        x="Impactados",
-        color="Sector",
-        orientation="h",
-        text="Impactados",
-        title="Alcance Total por Sector e Indicador",
-        color_discrete_sequence=px.colors.qualitative.Set2,
-        height=max(380, len(summary_ind) * 40)
-    )
-    fig_ind.update_traces(textposition="outside")
-    fig_ind.update_layout(yaxis={"autorange": "reversed"})
-    st.plotly_chart(fig_ind, use_container_width=True)
+    # Porcentaje respecto al total de impactados filtrados
+    summary_ind["Porcentaje (%)"] = (summary_ind["Valor_Absoluto"] / total_impactados) * 100
+    summary_ind["Porcentaje (%)"] = summary_ind["Porcentaje (%)"].map("{:.1f}%".format)
     
-    st.markdown("#### 📋 Resumen Detallado por Sector e Indicador")
+    summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
+    
+    # Presentación final en tabla limpia
     st.dataframe(
-        summary_ind[["Sector", "Indicador", "Impactados", "Participantes_Unicos"]].rename(columns={
-            "Sector": "Sector de Implementación",
-            "Indicador": "Nombre / Descripción del Indicador",
-            "Impactados": "Total Registros/Impactados",
+        summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
+            "Sector": "Sector",
+            "Indicador": "Indicador del Proyecto",
+            "Valor_Absoluto": "Valor Absoluto (Impactados)",
+            "Porcentaje (%)": "% del Total",
             "Participantes_Unicos": "Participantes Únicos"
         }),
-        use_container_width=True
+        use_container_width=True,
+        hide_index=True
     )
 
 st.markdown("---")
