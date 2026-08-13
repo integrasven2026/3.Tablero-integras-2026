@@ -18,6 +18,16 @@ st.title("Tablero de Monitoreo - Consorcio Integras")
 st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 st.markdown("---")
 
+# META TOTAL DEL PROYECTO
+META_PARTICIPANTES_UNICOS = 46122
+
+# Diccionario de Meses en Español
+MESES_ES = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+    5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+    9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+}
+
 # Mapeo de Códigos a Nombres Reales (Estados y Municipios)
 MAPA_ESTADOS = {
     "VE01": "Distrito Capital",
@@ -44,7 +54,6 @@ MAPA_MUNICIPIOS = {
     "VE2401": "Vargas"
 }
 
-# Coordenadas Geográficas de Municipios
 COORDENADAS_MUNICIPIOS = {
     "Libertador": [10.5000, -66.9167],
     "Caroní": [8.2833, -62.7167],
@@ -61,7 +70,6 @@ COORDENADAS_MUNICIPIOS = {
     "Vargas": [10.6000, -66.9333]
 }
 
-# Mapeo de Indicadores
 MAPA_INDICADORES = {
     "R1I2": "R1I2: Porcentaje de niños y cuidadores cuyas necesidades/riesgos urgentes de protección infantil se han abordado a través del proceso de gestión de casos.",
     "R1I3": "R1I3: Número de personas que accedieron a asistencia jurídica gratuita.",
@@ -112,7 +120,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
     registros_expandidos = []
     
     for row in data:
-        # Búsqueda y traducción de Sector
         sector_raw = str(row.get("Resultado") or row.get("group_datos_act/Resultado") or "").strip()
         sector_map = {
             "R1": "Protección",
@@ -123,21 +130,21 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         }
         sector_label = sector_map.get(sector_raw, sector_raw)
         
-        # Traducir Estado y Municipio desde el código
         estado_code = str(row.get("Estado") or row.get("group_datos_loc/Estado") or "").strip()
         estado_label = MAPA_ESTADOS.get(estado_code, estado_code)
         
         muni_code = str(row.get("Municipio") or row.get("group_datos_loc/Municipio") or "").strip()
         muni_label = MAPA_MUNICIPIOS.get(muni_code, muni_code)
         
-        # Indicadores
+        fecha_act = row.get("Fecha_de_la_Actividad") or row.get("group_datos_act/Fecha_de_la_Actividad") or row.get("_submission_time")
+        
         ind_val = row.get("Indicadores_resultados") or row.get("group_datos_act/Indicadores_resultados") or ""
         indicadores_raw = str(ind_val).split()
         indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
         
         base_info = {
             "_id": row.get("_id"),
-            "Fecha": row.get("Fecha_de_la_Actividad") or row.get("group_datos_act/Fecha_de_la_Actividad"),
+            "Fecha": fecha_act,
             "Estado": estado_label,
             "Municipio": muni_label,
             "Comunidad": row.get("Comunidad") or row.get("group_datos_loc/Comunidad"),
@@ -166,7 +173,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                     edad = 0
                 b_info["Edad"] = edad
                 
-                # Regla: Menores de 18 años son Niños/Niñas
                 if edad < 18:
                     b_info["Grupo_Demografico"] = "Niña" if sexo_raw in ["femenino", "f", "mujer"] else "Niño"
                 else:
@@ -176,7 +182,17 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         else:
             registros_expandidos.append(base_info)
             
-    return pd.DataFrame(registros_expandidos)
+    df = pd.DataFrame(registros_expandidos)
+    
+    if not df.empty and "Fecha" in df.columns:
+        df["Fecha_DT"] = pd.to_datetime(df["Fecha"], errors='coerce')
+        df["Mes_Reporte"] = df["Fecha_DT"].apply(
+            lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else "Sin Fecha"
+        )
+    else:
+        df["Mes_Reporte"] = "Sin Fecha"
+        
+    return df
 
 # Cargar credenciales
 try:
@@ -203,6 +219,13 @@ if df_raw.empty:
     st.warning("No se encontraron registros en el formulario de KoboToolbox.")
     st.stop()
 
+# Filtro Mes del Reporte
+meses_ordenados = sorted([m for m in df_raw["Mes_Reporte"].unique() if m != "Sin Fecha"])
+if "Sin Fecha" in df_raw["Mes_Reporte"].values:
+    meses_ordenados.append("Sin Fecha")
+meses_disp = ["Todos"] + meses_ordenados
+mes_sel = st.sidebar.selectbox("Mes del Reporte:", meses_disp)
+
 socios_disp = ["Todos"] + sorted([x for x in df_raw["ONG"].dropna().unique() if x])
 socio_sel = st.sidebar.selectbox("Socio / ONG:", socios_disp)
 
@@ -216,8 +239,10 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp)
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp)
 
-# Aplicar filtros
+# Aplicar Filtros
 df_filtered = df_raw.copy()
+if mes_sel != "Todos":
+    df_filtered = df_filtered[df_filtered["Mes_Reporte"] == mes_sel]
 if socio_sel != "Todos":
     df_filtered = df_filtered[df_filtered["ONG"] == socio_sel]
 if estado_sel != "Todos":
@@ -228,7 +253,7 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS CLAVE
+# 4. MÉTRICAS CLAVE (CON % ALCANCE DE LA META)
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
 
@@ -238,12 +263,12 @@ if "Documento" in df_filtered.columns and "CodigoID" in df_filtered.columns:
 else:
     total_unicos = total_impactados
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Total Impactados", f"{total_impactados:,}")
-col2.metric("Participantes Únicos", f"{total_unicos:,}")
-col3.metric("Estados Atendidos", df_filtered["Estado"].nunique() if total_impactados > 0 else 0)
-col4.metric("Municipios", df_filtered["Municipio"].nunique() if total_impactados > 0 else 0)
-col5.metric("Sectores", df_filtered["Sector"].nunique() if total_impactados > 0 else 0)
+pct_meta = (total_unicos / META_PARTICIPANTES_UNICOS) * 100
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Impactados (Admite duplicidad)", f"{total_impactados:,}")
+col2.metric("Total Participantes Únicos", f"{total_unicos:,}")
+col3.metric("% Alcance de la Meta (46.122 pers.)", f"{pct_meta:.2f}%")
 
 st.markdown("---")
 
@@ -358,7 +383,6 @@ with g2:
             title="Distribución por Sector de Implementación",
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
-        # Mostrar valor absoluto y porcentaje simultáneamente en la torta
         fig_pie.update_traces(textinfo="label+value+percent")
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -397,9 +421,7 @@ with m2:
     mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
     
     if total_impactados > 0:
-        # Agrupar por Estado, Municipio y Sector para el desglose del Mapa
         mapa_df = df_filtered.groupby(["Estado", "Municipio", "Sector"]).size().reset_index(name="Cantidad")
-        
         muni_totales = df_filtered.groupby(["Estado", "Municipio"]).size().reset_index(name="Total_Impactados")
         
         for idx, m_row in muni_totales.iterrows():
@@ -409,7 +431,6 @@ with m2:
             
             coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
             
-            # Construir resumen de sectores para el popup
             sectores_muni = mapa_df[(mapa_df["Estado"] == est) & (mapa_df["Municipio"] == mun)]
             sec_html = "".join([f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas</li>" for _, r in sectores_muni.iterrows()])
             
