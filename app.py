@@ -6,7 +6,18 @@ from streamlit_folium import st_folium
 import folium
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN DE PÁGINA
+# PALETA DE COLORES OFICIAL CONSORCIO INTEGRAS
+# -----------------------------------------------------------------------------
+PALETA_INTEGRAS = [
+    '#17C3B2',  # Turquesa
+    '#D89FE3',  # Morado / Orquídea
+    '#F3A738',  # Naranja / Dorado
+    '#08327D',  # Azul Marino
+    '#0072CE'   # Azul Celeste
+]
+
+# -----------------------------------------------------------------------------
+# 1. CONFIGURACIÓN DE PÁGINA Y ENCABEZADO CON LOGO SUPERIOR DERECHO
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
@@ -14,8 +25,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("Tablero de Monitoreo - Consorcio Integras")
-st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
+# Encabezado con Logo a la derecha
+col_header_title, col_header_logo = st.columns([3, 1])
+
+with col_header_title:
+    st.title("Tablero de Monitoreo - Consorcio Integras")
+    st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
+
+with col_header_logo:
+    try:
+        st.image("Integras_logo.jpg", use_container_width=True)
+    except Exception:
+        st.caption("*(Integras_logo.jpg)*")
+
 st.markdown("---")
 
 # META TOTAL DEL PROYECTO
@@ -345,7 +367,7 @@ if total_impactados > 0:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (CON VALOR ABSOLUTO Y PORCENTAJE)
+# 7. GRÁFICOS INTERACTIVOS (CON PALETA INTEGRAS Y SIN LEYENDAS)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
 
@@ -363,9 +385,10 @@ with g1:
             color="Grupo_Demografico",
             text="Etiqueta",
             title="Participantes por Rango Etario y Sexo",
-            color_discrete_sequence=px.colors.qualitative.Set2
+            color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_bar.update_traces(textposition="outside")
+        fig_bar.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
         st.plotly_chart(fig_bar, use_container_width=True)
 
 with g2:
@@ -381,9 +404,10 @@ with g2:
             names="Sector",
             hole=0.4,
             title="Distribución por Sector de Implementación",
-            color_discrete_sequence=px.colors.qualitative.Pastel
+            color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_pie.update_traces(textinfo="label+value+percent")
+        fig_pie.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
         st.plotly_chart(fig_pie, use_container_width=True)
 
 st.markdown("---")
@@ -410,9 +434,11 @@ with m1:
             color="Estado",
             orientation="h",
             text="Etiqueta",
-            height=400
+            height=400,
+            color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_muni.update_traces(textposition="outside")
+        fig_muni.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
         st.plotly_chart(fig_muni, use_container_width=True)
 
 with m2:
@@ -450,8 +476,9 @@ with m2:
                 location=coords,
                 radius=min(tot * 3, 20) + 6,
                 popup=folium.Popup(popup_content, max_width=250),
-                color="#1f77b4",
+                color="#17C3B2",
                 fill=True,
+                fill_color="#17C3B2",
                 fill_opacity=0.7
             ).add_to(mapa)
             
