@@ -4,20 +4,23 @@ import requests
 import plotly.express as px
 from streamlit_folium import st_folium
 import folium
+import os
 
 # -----------------------------------------------------------------------------
 # PALETA DE COLORES OFICIAL CONSORCIO INTEGRAS
 # -----------------------------------------------------------------------------
+COLOR_AGUAMARINA = '#17C3B2'  # Verde / Azul Agua Marina oficial
+
 PALETA_INTEGRAS = [
-    '#17C3B2',  # Turquesa
-    '#D89FE3',  # Morado / Orquídea
-    '#F3A738',  # Naranja / Dorado
-    '#08327D',  # Azul Marino
-    '#0072CE'   # Azul Celeste
+    COLOR_AGUAMARINA,  # Turquesa / Agua Marina
+    '#D89FE3',         # Morado / Orquídea
+    '#F3A738',         # Naranja / Dorado
+    '#08327D',         # Azul Marino
+    '#0072CE'          # Azul Celeste
 ]
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN DE PÁGINA Y ENCABEZADO CON LOGO SUPERIOR DERECHO
+# 1. CONFIGURACIÓN DE PÁGINA Y ENCABEZADO
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
@@ -25,18 +28,36 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Encabezado con Logo a la derecha
+# Encabezado con título en color Agua Marina y Logo a la derecha
 col_header_title, col_header_logo = st.columns([3, 1])
 
 with col_header_title:
-    st.title("Tablero de Monitoreo - Consorcio Integras")
+    # Título en color Azul Agua Marina / Verde (#17C3B2)
+    st.markdown(
+        f"<h1 style='color: {COLOR_AGUAMARINA}; margin-bottom: 5px; font-weight: 700;'>"
+        f"Tablero de Monitoreo - Consorcio Integras</h1>", 
+        unsafe_allow_html=True
+    )
     st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 
 with col_header_logo:
-    try:
-        st.image("Integras_logo.jpg", use_container_width=True)
-    except Exception:
-        st.caption("*(Integras_logo.jpg)*")
+    # Búsqueda flexible de la imagen en el directorio local
+    posibles_nombres = ["Integras_logo.jpg", "Integras_logo.png", "integras_logo.jpg", "integras_logo.png", "Integras_logo.jpeg"]
+    logo_path = None
+    
+    for nombre in posibles_nombres:
+        if os.path.exists(nombre):
+            logo_path = nombre
+            break
+
+    if logo_path:
+        try:
+            st.image(logo_path, use_container_width=True)
+        except TypeError:
+            # Respaldo para versiones anteriores de Streamlit
+            st.image(logo_path, use_column_width=True)
+    else:
+        st.warning("⚠️ Coloque el archivo 'Integras_logo.jpg' en la misma carpeta del script.")
 
 st.markdown("---")
 
@@ -119,7 +140,7 @@ MAPA_INDICADORES = {
 }
 
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (SERVIDOR UNIÓN EUROPEA)
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
@@ -275,7 +296,7 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS CLAVE (CON % ALCANCE DE LA META)
+# 4. MÉTRICAS CLAVE
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
 
@@ -367,7 +388,7 @@ if total_impactados > 0:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (CON PALETA INTEGRAS Y SIN LEYENDAS)
+# 7. GRÁFICOS INTERACTIVOS (PALETA INTEGRAS & SIN LEYENDAS)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
 
@@ -388,7 +409,7 @@ with g1:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_bar.update_traces(textposition="outside")
-        fig_bar.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
+        fig_bar.update_layout(showlegend=False)
         st.plotly_chart(fig_bar, use_container_width=True)
 
 with g2:
@@ -407,13 +428,13 @@ with g2:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_pie.update_traces(textinfo="label+value+percent")
-        fig_pie.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
+        fig_pie.update_layout(showlegend=False)
         st.plotly_chart(fig_pie, use_container_width=True)
 
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 8. UBICACIÓN GEOGRÁFICA Y MAPA DETALLADO CON SECTOR E IMPACTADOS
+# 8. UBICACIÓN GEOGRÁFICA Y MAPA
 # -----------------------------------------------------------------------------
 st.subheader("Ubicación Geográfica por Municipio")
 
@@ -438,7 +459,7 @@ with m1:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_muni.update_traces(textposition="outside")
-        fig_muni.update_layout(showlegend=False)  # Se elimina leyenda para ahorrar espacio
+        fig_muni.update_layout(showlegend=False)
         st.plotly_chart(fig_muni, use_container_width=True)
 
 with m2:
@@ -462,7 +483,7 @@ with m2:
             
             popup_content = f"""
             <div style='font-family: Arial; font-size: 12px; width: 200px;'>
-                <h4 style='margin-bottom: 5px; color: #1f77b4;'>{mun}</h4>
+                <h4 style='margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
                 <b>Estado:</b> {est}<br>
                 <b>Total Impactados:</b> {tot}<br><br>
                 <b>Desglose por Sector:</b>
@@ -476,9 +497,9 @@ with m2:
                 location=coords,
                 radius=min(tot * 3, 20) + 6,
                 popup=folium.Popup(popup_content, max_width=250),
-                color="#17C3B2",
+                color=COLOR_AGUAMARINA,
                 fill=True,
-                fill_color="#17C3B2",
+                fill_color=COLOR_AGUAMARINA,
                 fill_opacity=0.7
             ).add_to(mapa)
             
