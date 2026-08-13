@@ -6,12 +6,12 @@ from streamlit_folium import st_folium
 import folium
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN DE PÁGINA
+# 1. CONFIGURACIÓN DE PÁGINA (SINTAXIS CORREGIDA: layout="wide")
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
     page_icon="📊",
-    page_layout="wide",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -43,7 +43,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
     registros_expandidos = []
     
     for row in data:
-        # Mapeo de resultado a Sector de implementación
         sector_raw = str(row.get("Resultado", "")).strip()
         sector_map = {
             "R1": "Protección",
@@ -65,7 +64,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
             "Actividad": row.get("Actividad")
         }
         
-        # Procesar grupo repetido de beneficiarios
         beneficiarios = row.get("group_beneficiario", [])
         if isinstance(beneficiarios, list) and len(beneficiarios) > 0:
             for b in beneficiarios:
@@ -84,7 +82,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                     edad = 0
                 b_info["Edad"] = edad
                 
-                # Regla: Toda persona menor de 18 años es niño/niña
+                # Regla: Menores de 18 años son Niños/Niñas
                 if edad < 18:
                     b_info["Grupo_Demografico"] = "Niña" if sexo_raw in ["femenino", "f", "mujer"] else "Niño"
                 else:
@@ -96,13 +94,13 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
             
     return pd.DataFrame(registros_expandidos)
 
-# Intentar cargar las credenciales desde secrets
+# Cargar credenciales desde Secrets
 try:
     KOBO_TOKEN = st.secrets["KOBO_TOKEN"]
     ASSET_ID = st.secrets["ASSET_ID"]
     df_raw = cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
 except Exception:
-    st.info("👋 Por favor, configura tu `KOBO_TOKEN` y `ASSET_ID` en la sección de **Secrets** dentro de la configuración de Streamlit Cloud.")
+    st.info("👋 Por favor, configura tu `KOBO_TOKEN` y `ASSET_ID` en **Advanced settings -> Secrets** dentro de Streamlit Cloud.")
     st.stop()
 
 if df_raw.empty:
@@ -114,24 +112,20 @@ if df_raw.empty:
 # -----------------------------------------------------------------------------
 st.sidebar.header("🔍 Filtros de Consulta")
 
-# Filtro por Socio / ONG
 socios_disp = ["Todos"] + sorted([x for x in df_raw["ONG"].dropna().unique() if x])
 socio_sel = st.sidebar.selectbox("Socio / ONG:", socios_disp)
 
-# Filtro por Estado
 estados_disp = ["Todos"] + sorted([x for x in df_raw["Estado"].dropna().unique() if x])
 estado_sel = st.sidebar.selectbox("Estado:", estados_disp)
 
-# Filtro por Municipio (Dinámico)
 df_temp = df_raw if estado_sel == "Todos" else df_raw[df_raw["Estado"] == estado_sel]
 munis_disp = ["Todos"] + sorted([x for x in df_temp["Municipio"].dropna().unique() if x])
 muni_sel = st.sidebar.selectbox("Municipio:", munis_disp)
 
-# Filtro por Sector
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp)
 
-# Aplicar filtros
+# Aplicación de filtros
 df_filtered = df_raw.copy()
 if socio_sel != "Todos":
     df_filtered = df_filtered[df_filtered["ONG"] == socio_sel]
@@ -143,11 +137,10 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS E INDICADORES CLAVE (KPIs)
+# 4. MÉTRICAS CLAVE (KPIs)
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
 
-# Identificador único para evitar duplicados
 if "Documento" in df_filtered.columns and "CodigoID" in df_filtered.columns:
     df_filtered["ID_Unico"] = df_filtered["Documento"].replace("", None).fillna(df_filtered["CodigoID"])
     total_unicos = df_filtered["ID_Unico"].nunique()
@@ -168,7 +161,7 @@ st.markdown("---")
 # -----------------------------------------------------------------------------
 st.subheader("👥 Grupos de Participantes")
 
-if total_impactados > 0:
+if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
     counts = df_filtered["Grupo_Demografico"].value_counts()
     
     p_mujeres = (counts.get("Mujer", 0) / total_impactados) * 100
@@ -181,8 +174,6 @@ if total_impactados > 0:
     d2.metric("% Hombres (≥18 años)", f"{p_hombres:.1f}%")
     d3.metric("% Niñas (<18 años)", f"{p_ninas:.1f}%")
     d4.metric("% Niños (<18 años)", f"{p_ninos:.1f}%")
-else:
-    st.info("Sin registros para los filtros seleccionados.")
 
 st.markdown("---")
 
@@ -193,7 +184,7 @@ g1, g2 = st.columns(2)
 
 with g1:
     st.subheader("📊 Desglose por Sexo y Rango Etario")
-    if total_impactados > 0:
+    if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
         df_demo = df_filtered.groupby("Grupo_Demografico").size().reset_index(name="Cantidad")
         fig_bar = px.bar(
             df_demo, 
@@ -209,7 +200,7 @@ with g1:
 
 with g2:
     st.subheader("🥧 Participantes Únicos por Sector")
-    if total_impactados > 0:
+    if total_impactados > 0 and "Sector" in df_filtered.columns:
         df_sec_unicos = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"])
         df_sec_cnt = df_sec_unicos["Sector"].value_counts().reset_index()
         df_sec_cnt.columns = ["Sector", "Unicos"]
@@ -235,7 +226,7 @@ m1, m2 = st.columns([1, 1])
 
 with m1:
     st.markdown("### Participantes Impactados por Municipio")
-    if total_impactados > 0:
+    if total_impactados > 0 and "Municipio" in df_filtered.columns:
         df_muni = df_filtered.groupby(["Estado", "Municipio"]).size().reset_index(name="Impactados")
         df_muni = df_muni.sort_values(by="Impactados", ascending=True)
         
@@ -253,6 +244,6 @@ with m1:
 
 with m2:
     st.markdown("### Cobertura de la Intervención")
-    # Coordenadas centradas en Venezuela
     mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
     st_folium(mapa, width=500, height=380)
+   
