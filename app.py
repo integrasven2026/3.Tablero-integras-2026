@@ -301,7 +301,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                 elif sexo_raw in ["masculino", "m", "hombre"]:
                     sexo_norm = "Hombre"
                 else:
-                    sexo_norm = "Otro / No Especificado"
+                    sexo_norm = "Otro"
                     
                 b_info["Sexo"] = sexo_norm
                 
@@ -326,7 +326,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         else:
             base_info["CodigoID"] = f"ROW_{row.get('_id')}"
             base_info["ID_Unico"] = f"ROW_{row.get('_id')}"
-            base_info["Sexo"] = "Otro / No Especificado"
+            base_info["Sexo"] = "Otro"
             base_info["Es_Discapacidad"] = 0
             base_info["Es_Indigena"] = 0
             base_info["Es_Embarazada_Lactante"] = 0
@@ -406,13 +406,13 @@ estado_sel = st.sidebar.selectbox("Estado:", estados_disp, key="f_estado")
 
 df_temp = df_raw if estado_sel == "Todos" else df_raw[df_raw["Estado"] == estado_sel]
 munis_disp = ["Todos"] + sorted([x for x in df_temp["Municipio"].dropna().unique() if x])
-muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
+muni_sel = st.sidebar.selectbox("Municipio:", muni_sel_disp if (muni_sel_disp := munis_disp) else ["Todos"], key="f_muni")
 
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
-# FILTRO DE SEXO
-sexo_disp = ["Todos", "Hombre", "Mujer"]
+# FILTRO DE SEXO (TODOS, HOMBRE, MUJER, OTRO)
+sexo_disp = ["Todos", "Hombre", "Mujer", "Otro"]
 sexo_sel = st.sidebar.selectbox("Sexo del Participante:", sexo_disp, key="f_sexo")
 
 # Aplicar Filtros
