@@ -173,6 +173,28 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
+# DICCIONARIO DE METAS DEL PROYECTO POR CÓDIGO Y INDICADOR
+METAS_INDICADORES = {
+    "R1I2": {"meta": 0.90, "tipo": "porcentaje", "etiqueta": "90%"},
+    "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
+    "R1I4": {"meta": 0.75, "tipo": "porcentaje", "etiqueta": "75%"},
+    "R1I5": {"meta": 0.70, "tipo": "porcentaje", "etiqueta": "70%"},
+    "R1I6": {"meta": 0.90, "tipo": "porcentaje", "etiqueta": "90%"},
+    "R2I1": {"meta": 8622, "tipo": "numero", "etiqueta": "8,622"},
+    "R2I2": {"meta": 0.80, "tipo": "porcentaje", "etiqueta": "80%"},
+    "R2I3": {"meta": 20, "tipo": "numero", "etiqueta": "20"},
+    "R2I4": {"meta": 0.30, "tipo": "porcentaje", "etiqueta": "30%"},
+    "R2I5": {"meta": 5, "tipo": "numero", "etiqueta": "5"},
+    "R3I1": {"meta": 177, "tipo": "numero", "etiqueta": "177"},
+    "R3I2": {"meta": 34, "tipo": "numero", "etiqueta": "34"},
+    "R4I1": {"meta": 3200, "tipo": "numero", "etiqueta": "3,200"},
+    "R4I2": {"meta": 1200, "tipo": "numero", "etiqueta": "1,200"},
+    "R4I3": {"meta": 2800, "tipo": "numero", "etiqueta": "2,800"},
+    "R4I4": {"meta": 0.80, "tipo": "porcentaje", "etiqueta": "80%"},
+    "R5I1": {"meta": 800, "tipo": "numero", "etiqueta": "800"},
+    "R5I2": {"meta": 5100, "tipo": "numero", "etiqueta": "5,100"},
+}
+
 # -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX
 # -----------------------------------------------------------------------------
@@ -244,7 +266,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                 b_info["Documento"] = doc
                 b_info["CodigoID"] = cid
                 
-                # USO DIRECTO Y PRIORITARIO DE CodigoID
                 if cid and cid.lower() not in ["none", "null", "", "0", "n/a"]:
                     b_info["ID_Unico"] = cid
                 elif doc and doc.lower() not in ["none", "null", "", "0", "n/a"]:
@@ -376,15 +397,12 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS CLAVE (BASADAS EN CodigoID / ID_Unico)
+# 4. MÉTRICAS CLAVE
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
-
-# Base Unificada deduplicada estrictamente por CodigoID / ID_Unico
 df_unicos = df_filtered.drop_duplicates(subset=["ID_Unico"])
 total_unicos = len(df_unicos)
 
-# % Alcance de la Meta calculado con Participantes Únicos
 pct_meta = (total_unicos / META_PARTICIPANTES_UNICOS) * 100
 
 col1, col2, col3 = st.columns(3)
@@ -395,7 +413,7 @@ col3.metric("% Alcance de la Meta (46.122 pers.)", f"{pct_meta:.2f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 5. GRUPOS DEMOGRÁFICOS Y NECESIDADES ESPECÍFICAS (SOBRE PARTICIPANTES ÚNICOS)
+# 5. GRUPOS DEMOGRÁFICOS Y NECESIDADES ESPECÍFICAS
 # -----------------------------------------------------------------------------
 st.subheader("Grupos Demográficos y Necesidades Específicas")
 
@@ -434,7 +452,7 @@ ne4.metric("Población LGBTIQ+", f"{cnt_lgbtiq:,}", f"{p_lgbtiq:.1f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES CON DESCARGA EN EXCEL
+# 6. TABLA DESGLOSE DE INDICADORES CON METAS Y % DE ALCANCE
 # -----------------------------------------------------------------------------
 st.subheader("Desglose de Indicadores del Proyecto")
 
@@ -448,35 +466,77 @@ if total_impactados > 0:
             for cod in codigos:
                 records_ind.append({
                     "Sector": sector_actual,
+                    "Codigo_Ind": cod,
                     "Indicador": MAPA_INDICADORES.get(cod, cod),
                     "ID_Unico": row.get("ID_Unico")
                 })
         else:
             records_ind.append({
                 "Sector": sector_actual,
+                "Codigo_Ind": "SI",
                 "Indicador": f"Sin indicador ({sector_actual})",
                 "ID_Unico": row.get("ID_Unico")
             })
             
     df_ind_flat = pd.DataFrame(records_ind)
     
-    summary_ind = df_ind_flat.groupby(["Sector", "Indicador"]).agg(
+    summary_ind = df_ind_flat.groupby(["Sector", "Codigo_Ind", "Indicador"]).agg(
         Valor_Absoluto=("ID_Unico", "count"),
         Participantes_Unicos=("ID_Unico", "nunique")
     ).reset_index()
     
-    # % de Indicadores calculado directamente sobre Participantes Únicos Totales
-    summary_ind["Porcentaje (%)"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
-    summary_ind["Porcentaje (%)"] = summary_ind["Porcentaje (%)"].map("{:.1f}%".format)
+    summary_ind["Porcentaje_Total"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
+    
+    # Mapeo de Metas y Cálculo de % Alcance del Indicador
+    def obtener_meta_info(cod):
+        meta_data = METAS_INDICADORES.get(cod)
+        if meta_data:
+            return meta_data["etiqueta"], meta_data["meta"], meta_data["tipo"]
+        return "N/A", None, "ninguno"
+
+    meta_etiquetas = []
+    alcance_porcentajes = []
+
+    for _, row_ind in summary_ind.iterrows():
+        cod = row_ind["Codigo_Ind"]
+        etiqueta_meta, valor_meta, tipo_meta = obtener_meta_info(cod)
+        meta_etiquetas.append(etiqueta_meta)
+        
+        if valor_meta and valor_meta > 0:
+            if tipo_meta == "numero":
+                # Alcance sobre el total acumulado de participantes únicos vs Meta
+                alcance = (row_ind["Participantes_Unicos"] / valor_meta) * 100
+                alcance_porcentajes.append(f"{alcance:.1f}%")
+            elif tipo_meta == "porcentaje":
+                # Para metas en porcentaje se refleja el cumplimiento directo
+                alcance_porcentajes.append(f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})")
+        else:
+            alcance_porcentajes.append("N/A")
+
+    summary_ind["Meta del Proyecto"] = meta_etiquetas
+    summary_ind["% Alcance del Indicador"] = alcance_porcentajes
+    summary_ind["% del Total"] = summary_ind["Porcentaje_Total"].map("{:.1f}%".format)
     
     summary_ind = summary_ind.sort_values(by=["Sector", "Participantes_Unicos"], ascending=[True, False])
     
-    df_mostrar = summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
+    cols_ordenadas = [
+        "Sector", 
+        "Indicador", 
+        "Valor_Absoluto", 
+        "% del Total", 
+        "Participantes_Unicos", 
+        "Meta del Proyecto", 
+        "% Alcance del Indicador"
+    ]
+
+    df_mostrar = summary_ind[cols_ordenadas].rename(columns={
         "Sector": "Sector",
         "Indicador": "Indicador del Proyecto",
         "Valor_Absoluto": "Valor Absoluto (Impactados)",
-        "Porcentaje (%)": "% del Total",
-        "Participantes_Unicos": "Participantes Únicos"
+        "% del Total": "% del Total",
+        "Participantes_Unicos": "Participantes Únicos",
+        "Meta del Proyecto": "Meta del Proyecto",
+        "% Alcance del Indicador": "% Alcance del Indicador"
     })
     
     st.dataframe(
@@ -556,7 +616,7 @@ with g2:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 8. UBICACIÓN GEOGRÁFICA Y MAPA (POR PARTICIPANTES ÚNICOS)
+# 8. UBICACIÓN GEOGRÁFICA Y MAPA
 # -----------------------------------------------------------------------------
 st.subheader("Ubicación Geográfica por Municipio")
 
