@@ -236,25 +236,21 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         if isinstance(beneficiarios, list) and len(beneficiarios) > 0:
             for idx_b, b in enumerate(beneficiarios):
                 b_info = base_info.copy()
-                nombre = str(b.get("group_beneficiario/Nombre", "")).strip()
-                apellido = str(b.get("group_beneficiario/Apellido", "")).strip()
-                doc = str(b.get("group_beneficiario/N_de_Documento_de_Identidad", "")).strip()
                 cid = str(b.get("group_beneficiario/CodigoID", "")).strip()
+                doc = str(b.get("group_beneficiario/N_de_Documento_de_Identidad", "")).strip()
                 
-                b_info["Nombre"] = nombre
-                b_info["Apellido"] = apellido
+                b_info["Nombre"] = str(b.get("group_beneficiario/Nombre", "")).strip()
+                b_info["Apellido"] = str(b.get("group_beneficiario/Apellido", "")).strip()
                 b_info["Documento"] = doc
                 b_info["CodigoID"] = cid
                 
-                # Definición rigurosa de ID_Unico
-                if doc and doc.lower() not in ["none", "null", "", "0", "n/a"]:
+                # USO DIRECTO Y PRIORITARIO DE CodigoID
+                if cid and cid.lower() not in ["none", "null", "", "0", "n/a"]:
+                    b_info["ID_Unico"] = cid
+                elif doc and doc.lower() not in ["none", "null", "", "0", "n/a"]:
                     b_info["ID_Unico"] = f"DOC_{doc}"
-                elif cid and cid.lower() not in ["none", "null", "", "0", "n/a"]:
-                    b_info["ID_Unico"] = f"CID_{cid}"
-                elif nombre or apellido:
-                    b_info["ID_Unico"] = f"NOM_{nombre.upper()}_{apellido.upper()}"
                 else:
-                    b_info["ID_Unico"] = f"ROW_{row.get('_id')}_{idx_b}"
+                    b_info["ID_Unico"] = f"REG_{row.get('_id')}_{idx_b}"
 
                 sexo_raw = str(b.get("group_beneficiario/Sexo", "")).lower().strip()
                 b_info["Sexo"] = sexo_raw
@@ -282,6 +278,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
 
                 registros_expandidos.append(b_info)
         else:
+            base_info["CodigoID"] = f"ROW_{row.get('_id')}"
             base_info["ID_Unico"] = f"ROW_{row.get('_id')}"
             base_info["Es_Discapacidad"] = 0
             base_info["Es_Indigena"] = 0
@@ -379,15 +376,15 @@ if sector_sel != "Todos":
     df_filtered = df_filtered[df_filtered["Sector"] == sector_sel]
 
 # -----------------------------------------------------------------------------
-# 4. MÉTRICAS CLAVE (CALCULADAS CON PARTICIPANTES ÚNICOS)
+# 4. MÉTRICAS CLAVE (BASADAS EN CodigoID / ID_Unico)
 # -----------------------------------------------------------------------------
 total_impactados = len(df_filtered)
 
-# Base Unificada de Participantes Únicos
+# Base Unificada deduplicada estrictamente por CodigoID / ID_Unico
 df_unicos = df_filtered.drop_duplicates(subset=["ID_Unico"])
 total_unicos = len(df_unicos)
 
-# % Alcance de la Meta sobre Participantes Únicos
+# % Alcance de la Meta calculado con Participantes Únicos
 pct_meta = (total_unicos / META_PARTICIPANTES_UNICOS) * 100
 
 col1, col2, col3 = st.columns(3)
@@ -468,13 +465,13 @@ if total_impactados > 0:
         Participantes_Unicos=("ID_Unico", "nunique")
     ).reset_index()
     
-    # El Porcentaje (%) ahora se calcula en función de Participantes Únicos Totales
+    # % de Indicadores calculado directamente sobre Participantes Únicos Totales
     summary_ind["Porcentaje (%)"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
     summary_ind["Porcentaje (%)"] = summary_ind["Porcentaje (%)"].map("{:.1f}%".format)
     
     summary_ind = summary_ind.sort_values(by=["Sector", "Participantes_Unicos"], ascending=[True, False])
     
-    df_mostrar = summary_ind[["Sector", "Indicador", "Valor_Absoluto", "% del Total" if "% del Total" in summary_ind.columns else "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
+    df_mostrar = summary_ind[["Sector", "Indicador", "Valor_Absoluto", "Porcentaje (%)", "Participantes_Unicos"]].rename(columns={
         "Sector": "Sector",
         "Indicador": "Indicador del Proyecto",
         "Valor_Absoluto": "Valor Absoluto (Impactados)",
@@ -503,7 +500,7 @@ if total_impactados > 0:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (BASADOS EXCLUSIVAMENTE EN PARTICIPANTES ÚNICOS)
+# 7. GRÁFICOS INTERACTIVOS (POR PARTICIPANTES ÚNICOS)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
 
@@ -536,7 +533,6 @@ with g1:
 with g2:
     st.subheader("Participantes Únicos por Sector")
     if total_unicos > 0 and "Sector" in df_filtered.columns:
-        # Deduplicar por ID Único y Sector
         df_sec_unicos = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"])
         df_sec_cnt = df_sec_unicos["Sector"].value_counts().reset_index()
         df_sec_cnt.columns = ["Sector", "Unicos"]
@@ -560,7 +556,7 @@ with g2:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 8. UBICACIÓN GEOGRÁFICA Y MAPA (BASADOS EN PARTICIPANTES ÚNICOS)
+# 8. UBICACIÓN GEOGRÁFICA Y MAPA (POR PARTICIPANTES ÚNICOS)
 # -----------------------------------------------------------------------------
 st.subheader("Ubicación Geográfica por Municipio")
 
