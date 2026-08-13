@@ -173,9 +173,9 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
-# DICCIONARIO DE METAS DEL PROYECTO
+# DICCIONARIO DE METAS DEL PROYECTO CON R1I2 ACTUALIZADO (90% de 982 = 884 personas)
 METAS_INDICADORES = {
-    "R1I2": {"meta": 0.90, "tipo": "porcentaje", "etiqueta": "90%"},
+    "R1I2": {"meta": 883.8, "tipo": "numero", "etiqueta": "90% de 982 (884 pers.)"},
     "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
     "R1I4": {"meta": 0.75, "tipo": "porcentaje", "etiqueta": "75%"},
     "R1I5": {"meta": 0.70, "tipo": "porcentaje", "etiqueta": "70%"},
@@ -406,12 +406,12 @@ estado_sel = st.sidebar.selectbox("Estado:", estados_disp, key="f_estado")
 
 df_temp = df_raw if estado_sel == "Todos" else df_raw[df_raw["Estado"] == estado_sel]
 munis_disp = ["Todos"] + sorted([x for x in df_temp["Municipio"].dropna().unique() if x])
-muni_sel = st.sidebar.selectbox("Municipio:", muni_sel_disp if (muni_sel_disp := munis_disp) else ["Todos"], key="f_muni")
+muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
 
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
-# FILTRO DE SEXO (TODOS, HOMBRE, MUJER, OTRO)
+# FILTRO DE SEXO
 sexo_disp = ["Todos", "Hombre", "Mujer", "Otro"]
 sexo_sel = st.sidebar.selectbox("Sexo del Participante:", sexo_disp, key="f_sexo")
 
