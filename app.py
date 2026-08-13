@@ -173,7 +173,7 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
-# DICCIONARIO DE METAS DEL PROYECTO ACTUALIZADO
+# DICCIONARIO DE METAS DEL PROYECTO
 METAS_INDICADORES = {
     "R1I2": {"meta": 883.8, "tipo": "numero", "etiqueta": "90% de 982 (884 pers.)"},
     "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
@@ -320,7 +320,10 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                 b_info["Es_Discapacidad"] = extraer_valor_booleano(b, claves_discapacidad)
                 b_info["Es_Indigena"] = extraer_valor_booleano(b, claves_indigena)
                 b_info["Es_Embarazada_Lactante"] = extraer_valor_booleano(b, claves_embarazada)
-                b_info["Es_LGBTIQ"] = extraer_valor_booleano(b, claves_lgbtiq)
+                
+                # SI MARCAN "OTRO" EN SEXO, SE CONTABILIZA AUTOMÁTICAMENTE COMO POBLACIÓN LGBTIQ+
+                lgbtiq_kobo = extraer_valor_booleano(b, claves_lgbtiq)
+                b_info["Es_LGBTIQ"] = 1 if (lgbtiq_kobo == 1 or sexo_norm == "Otro") else 0
 
                 registros_expandidos.append(b_info)
         else:
@@ -330,7 +333,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
             base_info["Es_Discapacidad"] = 0
             base_info["Es_Indigena"] = 0
             base_info["Es_Embarazada_Lactante"] = 0
-            base_info["Es_LGBTIQ"] = 0
+            base_info["Es_LGBTIQ"] = 1  # Si es fila sin beneficiarios específicos marcados como 'Otro'
             registros_expandidos.append(base_info)
             
     df = pd.DataFrame(registros_expandidos)
