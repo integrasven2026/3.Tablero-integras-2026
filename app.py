@@ -196,6 +196,21 @@ METAS_INDICADORES = {
 }
 
 # -----------------------------------------------------------------------------
+# FUNCIONES AUXILIARES DE EXTRACCIÓN ROBUSTA
+# -----------------------------------------------------------------------------
+def extraer_valor_booleano(diccionario_beneficiario, lista_posibles_claves):
+    """Busca en múltiples nombres de claves de Kobo y determina si el valor es AFIRMATIVO."""
+    val_afirmativos = ["sí", "si", "yes", "1", "s", "true"]
+    
+    for clave in lista_posibles_claves:
+        for k_item, v_item in diccionario_beneficiario.items():
+            if clave.lower() in str(k_item).lower():
+                val_str = str(v_item).lower().strip()
+                if val_str in val_afirmativos or v_item == 1 or v_item is True:
+                    return 1
+    return 0
+
+# -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
@@ -218,6 +233,12 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
 
     registros_expandidos = []
     
+    # Nombres posibles de columnas según formulario de Kobo
+    claves_discapacidad = ["persona_con_discapacidad", "discapacidad", "count_discapacidad"]
+    claves_indigena = ["poblacion_indigena", "indigena", "count_indigena"]
+    claves_embarazada = ["embarazada", "lactante", "embarazada_o_lactante", "count_embarazada"]
+    claves_lgbtiq = ["poblacion_lgbtiq", "lgbtiq", "count_lgbtiq"]
+
     for row in data:
         sector_raw = str(row.get("Resultado") or row.get("group_datos_act/Resultado") or "").strip()
         sector_map = {
@@ -275,7 +296,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
 
                 sexo_raw = str(b.get("group_beneficiario/Sexo", "")).lower().strip()
                 
-                # Normalización del campo Sexo
                 if sexo_raw in ["femenino", "f", "mujer"]:
                     sexo_norm = "Mujer"
                 elif sexo_raw in ["masculino", "m", "hombre"]:
@@ -296,15 +316,11 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
                 else:
                     b_info["Grupo_Demografico"] = "Mujer" if sexo_norm == "Mujer" else "Hombre"
 
-                discapacidad_val = str(b.get("group_beneficiario/discapacidad", b.get("group_beneficiario/Discapacidad", ""))).lower().strip()
-                indigena_val = str(b.get("group_beneficiario/indigena", b.get("group_beneficiario/Indigena", ""))).lower().strip()
-                emb_lact_val = str(b.get("group_beneficiario/embarazada_lactante", b.get("group_beneficiario/Embarazada_Lactante", ""))).lower().strip()
-                lgbtiq_val = str(b.get("group_beneficiario/lgbtiq", b.get("group_beneficiario/LGBTIQ", ""))).lower().strip()
-
-                b_info["Es_Discapacidad"] = 1 if discapacidad_val in ["si", "yes", "1", "s"] else 0
-                b_info["Es_Indigena"] = 1 if indigena_val in ["si", "yes", "1", "s"] else 0
-                b_info["Es_Embarazada_Lactante"] = 1 if emb_lact_val in ["si", "yes", "1", "s", "embarazada", "lactante"] else 0
-                b_info["Es_LGBTIQ"] = 1 if lgbtiq_val in ["si", "yes", "1", "s"] else 0
+                # Extracción Adaptativa de Necesidades Específicas
+                b_info["Es_Discapacidad"] = extraer_valor_booleano(b, claves_discapacidad)
+                b_info["Es_Indigena"] = extraer_valor_booleano(b, claves_indigena)
+                b_info["Es_Embarazada_Lactante"] = extraer_valor_booleano(b, claves_embarazada)
+                b_info["Es_LGBTIQ"] = extraer_valor_booleano(b, claves_lgbtiq)
 
                 registros_expandidos.append(b_info)
         else:
@@ -395,7 +411,7 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
-# FILTRO DE SEXO (HOMBRE / MUJER)
+# FILTRO DE SEXO
 sexo_disp = ["Todos", "Hombre", "Mujer"]
 sexo_sel = st.sidebar.selectbox("Sexo del Participante:", sexo_disp, key="f_sexo")
 
@@ -470,7 +486,7 @@ ne4.metric("Población LGBTIQ+", f"{cnt_lgbtiq:,}", f"{p_lgbtiq:.1f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES (SIN COLUMNA "PARTICIPANTES ÚNICOS")
+# 6. TABLA DESGLOSE DE INDICADORES
 # -----------------------------------------------------------------------------
 st.subheader("Desglose de Indicadores del Proyecto")
 
@@ -534,7 +550,6 @@ if total_impactados > 0:
     
     summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
     
-    # SE ELIMINÓ "Participantes_Unicos" DE LAS COLUMNAS MOSTRADAS
     cols_ordenadas = [
         "Sector", 
         "Indicador", 
