@@ -6,7 +6,7 @@ from streamlit_folium import st_folium
 import folium
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN DE PÁGINA (SINTAXIS CORREGIDA: layout="wide")
+# 1. CONFIGURACIÓN DE PÁGINA
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
@@ -18,6 +18,33 @@ st.set_page_config(
 st.title("📊 Tablero de Monitoreo - Consorcio Integras")
 st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 st.markdown("---")
+
+# Diccionario de Mapeo de Indicadores Oficiales
+MAPA_INDICADORES = {
+    "R1I2": "R1I2: Porcentaje de niños y cuidadores cuyas necesidades/riesgos urgentes de protección infantil se han abordado a través del proceso de gestión de casos.",
+    "R1I3": "R1I3: Número de personas que accedieron a asistencia jurídica gratuita.",
+    "R1I4": "R1I4: Porcentaje de aumento del conocimiento entre los participantes sobre el tema de protección en cuestión.",
+    "R1I5": "R1I5: Porcentaje de las personas que reciben apoyo psicosocial adecuado informan de una mejoría en su salud mental y bienestar psicosocial O en su capacidad para afrontar las dificultades.",
+    "R1I6": "R1I6: Porcentaje de casos de alto riesgo de violencia de género supervisados. (KRI)",
+    "R1SI": "R1SI: Sin indicador",
+    "R2I1": "R2I1: Número total de consultas de atención primaria de salud",
+    "R2I2": "R2I2: Porcentaje de partos atendidos por personal sanitario cualificado (médicos, enfermeras, matronas)",
+    "R2I3": "R2I3: Número de consultas por staff al día",
+    "R2I4": "R2I4: Tasa de abandono ANC4/ANC1",
+    "R2I5": "R2I5: Número de centros sanitarios que implementan la segregación de residuos y siguen las normas de gestión y tratamiento recomendadas.",
+    "R2SI": "R2SI: Sin indicador",
+    "R3I1": "R3I1: Número de niños menores de 5 años ingresados para el tratamiento de la desnutrición aguda grave o moderada",
+    "R3I2": "R3I2: Número de mujeres embarazadas y/o lactantes ingresadas para tratamiento por desnutrición aguda moderada grave o de alto riesgo.",
+    "R3SI": "R3SI: Sin indicador",
+    "R4I1": "R4I1: Número de personas beneficiarias que tienen acceso a agua suficiente y segura para uso doméstico.",
+    "R4I2": "R4I2: Número de personas que tienen acceso regular y adecuado al jabón para satisfacer sus necesidades higiénicas.",
+    "R4I3": "R4I3: Número de personas con acceso a instalaciones dignas, seguras, limpias y funcionales para la eliminación de excretas.",
+    "R4I4": "R4I4: Porcentaje de la población objetivo que recibió asistencia y que fue sensibilizada sobre prácticas seguras de gestión de residuos.",
+    "R4SI": "R4SI: Sin indicador",
+    "R5I1": "R5I1: Número de personas cubiertas por los planes de acción temprana/contingencia.",
+    "R5I2": "R5I2: Número de alertas atendidas",
+    "R5SI": "R5SI: Sin indicador"
+}
 
 # -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX (SERVIDOR UNIÓN EUROPEA)
@@ -53,6 +80,10 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         }
         sector_label = sector_map.get(sector_raw, sector_raw)
         
+        # Procesar selección múltiple de indicadores
+        indicadores_raw = str(row.get("Indicadores_resultados", "")).split()
+        indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
+        
         base_info = {
             "_id": row.get("_id"),
             "Fecha": row.get("Fecha_de_la_Actividad"),
@@ -61,7 +92,9 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
             "Comunidad": row.get("Comunidad"),
             "ONG": row.get("ong"),
             "Sector": sector_label,
-            "Actividad": row.get("Actividad")
+            "Actividad": row.get("Actividad"),
+            "Indicadores_Codigos": indicadores_raw,
+            "Indicadores_Texto": " | ".join(indicadores_labels) if indicadores_labels else "Sin Indicador"
         }
         
         beneficiarios = row.get("group_beneficiario", [])
@@ -125,7 +158,7 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp)
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp)
 
-# Aplicación de filtros
+# Aplicar filtros base
 df_filtered = df_raw.copy()
 if socio_sel != "Todos":
     df_filtered = df_filtered[df_filtered["ONG"] == socio_sel]
@@ -178,7 +211,72 @@ if total_impactados > 0 and "Grupo_Demografico" in df_filtered.columns:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. GRÁFICOS INTERACTIVOS (BARRAS Y TORTA)
+# 6. SECCIÓN DESGLOSE DE INDICADORES DEL PROYECTO
+# -----------------------------------------------------------------------------
+st.subheader("🎯 Reporte y Desglose por Indicador de Proyecto")
+
+if total_impactados > 0:
+    # Aplanar los indicadores seleccionados para cada registro
+    records_ind = []
+    for idx, row in df_filtered.iterrows():
+        codigos = row.get("Indicadores_Codigos", [])
+        if isinstance(codigos, list) and len(codigos) > 0:
+            for cod in codigos:
+                records_ind.append({
+                    "Codigo": cod,
+                    "Indicador": MAPA_INDICADORES.get(cod, cod),
+                    "ID_Unico": row.get("ID_Unico"),
+                    "ONG": row.get("ONG"),
+                    "Sector": row.get("Sector")
+                })
+        else:
+            records_ind.append({
+                "Codigo": "Sin Indicador",
+                "Indicador": "Sin Indicador",
+                "ID_Unico": row.get("ID_Unico"),
+                "ONG": row.get("ONG"),
+                "Sector": row.get("Sector")
+            })
+            
+    df_ind_flat = pd.DataFrame(records_ind)
+    
+    # Resumen por Indicador
+    summary_ind = df_ind_flat.groupby("Indicador").agg(
+        Impactados=("ID_Unico", "count"),
+        Participantes_Unicos=("ID_Unico", "nunique")
+    ).reset_index().sort_values(by="Impactados", ascending=False)
+    
+    # Grafico de Barras de Indicadores
+    fig_ind = px.bar(
+        summary_ind,
+        y="Indicador",
+        x="Impactados",
+        orientation="h",
+        text="Impactados",
+        title="Alcance Total de Impactados por Indicador",
+        color="Impactados",
+        color_continuous_scale="Viridis",
+        height=max(350, len(summary_ind) * 35)
+    )
+    fig_ind.update_traces(textposition="outside")
+    fig_ind.update_layout(yaxis={"autorange": "reversed"})
+    st.plotly_chart(fig_ind, use_container_width=True)
+    
+    # Tabla Detallada de Indicadores
+    st.markdown("#### 📋 Resumen Detallado de Indicadores")
+    st.dataframe(
+        summary_ind.rename(columns={
+            "Indicador": "Nombre / Descripción del Indicador",
+            "Impactados": "Total Registros/Impactados",
+            "Participantes_Unicos": "Participantes Únicos"
+        }),
+        use_container_width=True
+    )
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
+# 7. GRÁFICOS INTERACTIVOS (BARRAS Y TORTA)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
 
@@ -218,7 +316,7 @@ with g2:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. UBICACIÓN GEOGRÁFICA Y BARRAS POR MUNICIPIO
+# 8. UBICACIÓN GEOGRÁFICA Y BARRAS POR MUNICIPIO
 # -----------------------------------------------------------------------------
 st.subheader("🗺️ Ubicación Geográfica por Municipio")
 
@@ -246,4 +344,3 @@ with m2:
     st.markdown("### Cobertura de la Intervención")
     mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
     st_folium(mapa, width=500, height=380)
-   
