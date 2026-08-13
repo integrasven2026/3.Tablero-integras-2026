@@ -1,4 +1,4 @@
-import streamlit as st
+  import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
@@ -20,7 +20,7 @@ PALETA_INTEGRAS = [
 ]
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN DE PÁGINA Y ENCABEZADO
+# 1. CONFIGURACIÓN DE PÁGINA Y FUENTES PERSONALIZADAS (CSS)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Tablero Consorcio Integras | COOPI",
@@ -28,20 +28,49 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Encabezado con título en color Agua Marina y Logo a la derecha
+# Inyección de Fuentes: Quicksand y Now (o Montserrat como fallback de Now)
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Quicksand:wght@600;700&display=swap');
+
+    /* Aplicar Quicksand Bold a todo el cuerpo de la aplicación */
+    html, body, [class*="css"], .stMarkdown, p, div, span, label, input, button {
+        font-family: 'Quicksand', sans-serif !important;
+        font-weight: 700 !important;
+    }
+
+    /* Tipografía para los Títulos principales y subsecciones (Now Bold / Montserrat) */
+    h1, h2, h3, h4, h5, h6, .stSubheader {
+        font-family: 'Now', 'Montserrat', sans-serif !important;
+        font-weight: 700 !important;
+    }
+
+    /* Personalización del Título Principal */
+    .titulo-principal {
+        font-family: 'Now', 'Montserrat', sans-serif !important;
+        color: #17C3B2 !important;
+        margin-bottom: 5px !important;
+        font-weight: 800 !important;
+        font-size: 2.2rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# ENCABEZADO Y LOGO
+# -----------------------------------------------------------------------------
 col_header_title, col_header_logo = st.columns([3, 1])
 
 with col_header_title:
-    # Título en color Azul Agua Marina / Verde (#17C3B2)
+    # Título principal en color Azul Agua Marina (#17C3B2) con fuente Now Bold
     st.markdown(
-        f"<h1 style='color: {COLOR_AGUAMARINA}; margin-bottom: 5px; font-weight: 700;'>"
-        f"Tablero de Monitoreo - Consorcio Integras</h1>", 
+        f"<h1 class='titulo-principal'>Tablero de Monitoreo - Consorcio Integras</h1>", 
         unsafe_allow_html=True
     )
     st.markdown("**Socio Prime / Líder:** COOPI | **Socios:** HIAS, FLM, PLAFAM, PALUZ")
 
 with col_header_logo:
-    # Búsqueda flexible de la imagen en el directorio local
+    # Búsqueda flexible del archivo del logo
     posibles_nombres = ["Integras_logo.jpg", "Integras_logo.png", "integras_logo.jpg", "integras_logo.png", "Integras_logo.jpeg"]
     logo_path = None
     
@@ -54,7 +83,6 @@ with col_header_logo:
         try:
             st.image(logo_path, use_container_width=True)
         except TypeError:
-            # Respaldo para versiones anteriores de Streamlit
             st.image(logo_path, use_column_width=True)
     else:
         st.warning("⚠️ Coloque el archivo 'Integras_logo.jpg' en la misma carpeta del script.")
@@ -388,9 +416,11 @@ if total_impactados > 0:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (PALETA INTEGRAS & SIN LEYENDAS)
+# 7. GRÁFICOS INTERACTIVOS (CON FUENTES ESTILIZADAS)
 # -----------------------------------------------------------------------------
 g1, g2 = st.columns(2)
+
+font_layout = dict(family="Quicksand", size=13)
 
 with g1:
     st.subheader("Desglose por Sexo y Rango Etario")
@@ -409,7 +439,11 @@ with g1:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_bar.update_traces(textposition="outside")
-        fig_bar.update_layout(showlegend=False)
+        fig_bar.update_layout(
+            showlegend=False,
+            font=font_layout,
+            title_font=dict(family="Now, Montserrat", size=16)
+        )
         st.plotly_chart(fig_bar, use_container_width=True)
 
 with g2:
@@ -428,7 +462,11 @@ with g2:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_pie.update_traces(textinfo="label+value+percent")
-        fig_pie.update_layout(showlegend=False)
+        fig_pie.update_layout(
+            showlegend=False,
+            font=font_layout,
+            title_font=dict(family="Now, Montserrat", size=16)
+        )
         st.plotly_chart(fig_pie, use_container_width=True)
 
 st.markdown("---")
@@ -459,7 +497,10 @@ with m1:
             color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_muni.update_traces(textposition="outside")
-        fig_muni.update_layout(showlegend=False)
+        fig_muni.update_layout(
+            showlegend=False,
+            font=font_layout
+        )
         st.plotly_chart(fig_muni, use_container_width=True)
 
 with m2:
@@ -482,8 +523,8 @@ with m2:
             sec_html = "".join([f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas</li>" for _, r in sectores_muni.iterrows()])
             
             popup_content = f"""
-            <div style='font-family: Arial; font-size: 12px; width: 200px;'>
-                <h4 style='margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
+            <div style='font-family: Quicksand, sans-serif; font-weight: 700; font-size: 12px; width: 200px;'>
+                <h4 style='font-family: Now, Montserrat, sans-serif; margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
                 <b>Estado:</b> {est}<br>
                 <b>Total Impactados:</b> {tot}<br><br>
                 <b>Desglose por Sector:</b>
