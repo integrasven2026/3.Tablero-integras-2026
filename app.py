@@ -11,10 +11,11 @@ import io
 # PALETA DE COLORES OFICIAL CONSORCIO INTEGRAS
 # -----------------------------------------------------------------------------
 COLOR_AGUAMARINA = '#17C3B2'  # Verde / Azul Agua Marina oficial
+COLOR_ROSADO_AAP = '#D89FE3'   # Morado / Rosado Orquídea para Reporte AAP
 
 PALETA_INTEGRAS = [
     COLOR_AGUAMARINA,  # Turquesa / Agua Marina
-    '#D89FE3',         # Morado / Orquídea
+    COLOR_ROSADO_AAP,  # Morado / Orquídea / Rosado
     '#F3A738',         # Naranja / Dorado
     '#08327D',         # Azul Marino
     '#0072CE'          # Azul Celeste
@@ -50,6 +51,15 @@ st.markdown("""
         margin-bottom: 5px !important;
         font-weight: 800 !important;
         font-size: 2.2rem !important;
+    }
+
+    .titulo-aap {
+        font-family: 'Now', 'Montserrat', sans-serif !important;
+        color: #D89FE3 !important;
+        margin-top: 15px !important;
+        margin-bottom: 5px !important;
+        font-weight: 800 !important;
+        font-size: 1.8rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -211,7 +221,7 @@ def extraer_valor_booleano(diccionario_beneficiario, lista_posibles_claves):
     return 0
 
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
@@ -347,6 +357,62 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         
     return df
 
+# CARGA DE DATOS DEL FORMULARIO AAP / PQRS
+@st.cache_data(ttl=3600)
+def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.org"):
+    headers = {"Authorization": f"Token {token_aap}"}
+    url = f"{kobo_url}/api/v2/assets/{asset_id_aap}/data.json"
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return pd.DataFrame()
+        
+        data = response.json().get('results', [])
+        if not data:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+    aap_rows = []
+    for r in data:
+        # Búsqueda dinámica de campos clave en Kobo
+        canal = (
+            r.get("canal") or r.get("canal_recepcion") or r.get("medio") or r.get("group_pqrs/canal") or "Sin especificar"
+        )
+        tipo_pqrs = (
+            r.get("tipo") or r.get("tipo_pqrs") or r.get("clasificacion") or r.get("group_pqrs/tipo") or "Información"
+        )
+        estado_caso = (
+            r.get("estado") or r.get("estado_caso") or r.get("seguimiento") or r.get("group_pqrs/estado") or "Recibido"
+        )
+        fecha_aap = r.get("fecha") or r.get("fecha_recepcion") or r.get("_submission_time")
+        
+        discapacidad = extraer_valor_booleano(r, ["discapacidad", "discapaz", "pcd"])
+
+        aap_rows.append({
+            "_id": r.get("_id"),
+            "Canal": str(canal).replace("_", " ").title(),
+            "Tipo_PQRS": str(tipo_pqrs).replace("_", " ").title(),
+            "Estado_Caso": str(estado_caso).replace("_", " ").title(),
+            "Fecha": fecha_aap,
+            "Discapacidad": discapacidad,
+            "Socio": str(r.get("ong") or r.get("socio") or "COOPI").upper().strip(),
+            "Estado_Geo": MAPA_ESTADOS.get(str(r.get("estado_geo") or r.get("estado") or ""), "General")
+        })
+
+    df_aap = pd.DataFrame(aap_rows)
+    
+    if not df_aap.empty and "Fecha" in df_aap.columns:
+        df_aap["Fecha_DT"] = pd.to_datetime(df_aap["Fecha"], errors='coerce')
+        df_aap["Mes_Reporte"] = df_aap["Fecha_DT"].apply(
+            lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else "Sin Fecha"
+        )
+    else:
+        df_aap["Mes_Reporte"] = "Sin Fecha"
+
+    return df_aap
+
 # Cargar credenciales
 try:
     KOBO_TOKEN = st.secrets["KOBO_TOKEN"]
@@ -355,6 +421,11 @@ try:
 except Exception:
     st.info("Por favor, configura tu KOBO_TOKEN y ASSET_ID en Secrets.")
     st.stop()
+
+# Cargar datos AAP
+ASSET_ID_AAP = "aRbFg8ig22Ts5JFFvsWNaE"
+TOKEN_AAP = "a18c017a2e697f4ea1272375dae261ccec6b19d7"
+df_aap_raw = cargar_datos_aap(ASSET_ID_AAP, TOKEN_AAP)
 
 # -----------------------------------------------------------------------------
 # 3. FILTROS LATERALES CON BOTÓN DE LIMPIEZA Y FILTRO POR SEXO
@@ -864,3 +935,137 @@ if not df_reporte_act.empty:
     )
 else:
     st.info("No se registraron actividades correspondientes a los filtros seleccionados.")
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
+# 10. REPORTE AAP (RENDICIÓN DE CUENTAS / PQRS)
+# -----------------------------------------------------------------------------
+st.markdown("<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>", unsafe_allow_html=True)
+st.caption("Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio Integras")
+
+# Aplicar filtros globales al DataFrame de AAP
+df_aap_filtered = df_aap_raw.copy()
+if not df_aap_filtered.empty:
+    if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
+        df_aap_filtered = df_aap_filtered[df_aap_filtered["Mes_Reporte"] == mes_sel]
+    if socio_sel != "Todos" and "Socio" in df_aap_filtered.columns:
+        df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_sel]
+    if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
+        df_aap_filtered = df_aap_filtered[df_aap_filtered["Estado_Geo"] == estado_sel]
+
+total_pqrs = len(df_aap_filtered)
+disc_pqrs = int(df_aap_filtered["Discapacidad"].sum()) if "Discapacidad" in df_aap_filtered.columns else 0
+
+# Fila 1: Métricas principales
+col_a1, col_a2 = st.columns([1, 1])
+with col_a1:
+    st.metric("Total de PQRS", f"{total_pqrs:,}")
+with col_a2:
+    st.metric("Discapacidad Total (PQRS)", f"{disc_pqrs:,}" if disc_pqrs > 0 else "--")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Fila 2: Gráficos principales
+aap_c1, aap_c2 = st.columns(2)
+
+with aap_c1:
+    st.markdown("### Canal más utilizado por los participantes")
+    if total_pqrs > 0 and "Canal" in df_aap_filtered.columns:
+        df_canal = df_aap_filtered["Canal"].value_counts().reset_index()
+        df_canal.columns = ["Canal", "Cantidad"]
+        df_canal = df_canal.sort_values(by="Cantidad", ascending=True)
+        
+        fig_canal = px.bar(
+            df_canal,
+            y="Canal",
+            x="Cantidad",
+            orientation="h",
+            text="Cantidad",
+            color_discrete_sequence=[COLOR_ROSADO_AAP]
+        )
+        fig_canal.update_traces(textposition="outside")
+        fig_canal.update_layout(
+            xaxis_title="Número de PQRS",
+            yaxis_title="",
+            font=font_layout,
+            height=320
+        )
+        st.plotly_chart(fig_canal, width="stretch")
+    else:
+        st.info("No hay datos de canales registrados.")
+
+with aap_c2:
+    st.markdown("### Tipos de PQRS Recibidos")
+    if total_pqrs > 0 and "Tipo_PQRS" in df_aap_filtered.columns:
+        df_tipo = df_aap_filtered["Tipo_PQRS"].value_counts().reset_index()
+        df_tipo.columns = ["Tipo", "Cantidad"]
+        
+        fig_tipo = px.pie(
+            df_tipo,
+            names="Tipo",
+            values="Cantidad",
+            hole=0.4,
+            color_discrete_sequence=[COLOR_ROSADO_AAP, '#17C3B2', '#08327D', '#F3A738', '#0072CE']
+        )
+        fig_tipo.update_traces(textinfo="label+value+percent")
+        fig_tipo.update_layout(
+            showlegend=True,
+            font=font_layout,
+            height=320
+        )
+        st.plotly_chart(fig_tipo, width="stretch")
+    else:
+        st.info("No hay datos de tipos de PQRS.")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Fila 3: Atendidos por mes y Seguimiento a casos
+aap_c3, aap_c4 = st.columns(2)
+
+with aap_c3:
+    st.markdown("### Participantes Atendidos por Mes")
+    if total_pqrs > 0 and "Mes_Reporte" in df_aap_filtered.columns:
+        df_mes_aap = df_aap_filtered.groupby("Mes_Reporte").size().reset_index(name="Atendidos")
+        
+        fig_mes_aap = px.area(
+            df_mes_aap,
+            x="Mes_Reporte",
+            y="Atendidos",
+            text="Atendidos",
+            color_discrete_sequence=[COLOR_ROSADO_AAP]
+        )
+        fig_mes_aap.update_traces(textposition="top center")
+        fig_mes_aap.update_layout(
+            xaxis_title="Mes",
+            yaxis_title="PQRS Recibidos",
+            font=font_layout,
+            height=320
+        )
+        st.plotly_chart(fig_mes_aap, width="stretch")
+    else:
+        st.info("No hay datos de temporalidad.")
+
+with aap_c4:
+    st.markdown("### Seguimiento a los Casos")
+    if total_pqrs > 0 and "Estado_Caso" in df_aap_filtered.columns:
+        df_est_aap = df_aap_filtered["Estado_Caso"].value_counts().reset_index()
+        df_est_aap.columns = ["Estado", "Cantidad"]
+        
+        fig_est_aap = px.bar(
+            df_est_aap,
+            x="Estado",
+            y="Cantidad",
+            text="Cantidad",
+            color_discrete_sequence=['#F3A738']
+        )
+        fig_est_aap.update_traces(textposition="outside")
+        fig_est_aap.update_layout(
+            xaxis_title="Estado de Resolución",
+            yaxis_title="Casos",
+            font=font_layout,
+            height=320
+        )
+        st.plotly_chart(fig_est_aap, width="stretch")
+    else:
+        st.info("No hay datos de seguimiento de casos.")
