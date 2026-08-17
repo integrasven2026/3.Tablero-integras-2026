@@ -86,12 +86,12 @@ with col_header_logo:
 
     if logo_path:
         try:
-            st.image(logo_path, use_container_width=True)
+            st.image(logo_path, width="stretch")
         except TypeError:
-            st.image(logo_path, use_column_width=True)
+            st.image(logo_path, width="stretch")
     else:
         try:
-            st.image(URL_LOGO_GITHUB, use_container_width=True)
+            st.image(URL_LOGO_GITHUB, width="stretch")
         except Exception:
             st.warning("⚠️ No se pudo cargar el logo 'integras.jpg'.")
 
@@ -364,7 +364,7 @@ st.sidebar.header("Sincronización en Tiempo Real")
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
-    if st.button("🔄 Actualizar", use_container_width=True):
+    if st.button("🔄 Actualizar", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -384,7 +384,7 @@ def borrar_filtros():
     st.session_state.f_sexo = "Todos"
 
 with col_btn2:
-    st.button("🧹 Limpiar Filtros", on_click=borrar_filtros, use_container_width=True)
+    st.button("🧹 Limpiar Filtros", on_click=borrar_filtros, width="stretch")
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtros de Consulta")
@@ -572,7 +572,7 @@ if total_impactados > 0:
     
     st.dataframe(
         df_mostrar,
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 
@@ -619,7 +619,7 @@ with g1:
             font=font_layout,
             title_font=dict(family="Now, Montserrat", size=16)
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width="stretch")
 
 with g2:
     st.subheader("Participantes Únicos por Sector")
@@ -642,7 +642,7 @@ with g2:
             font=font_layout,
             title_font=dict(family="Now, Montserrat", size=16)
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width="stretch")
 
 st.markdown("---")
 
@@ -676,7 +676,7 @@ with m1:
             showlegend=False,
             font=font_layout
         )
-        st.plotly_chart(fig_muni, use_container_width=True)
+        st.plotly_chart(fig_muni, width="stretch")
 
 with m2:
     st.markdown("### Cobertura de la Intervención")
@@ -815,8 +815,8 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
         df_act = df_filtered[
             (df_filtered["ONG"] == socio_reporte) &
             (
-                df_filtered["Actividad"].str.contains(act_nombre, case=False, na=False) |
-                df_filtered["Sector"].str.contains(sec, case=False, na=False)
+                df_filtered["Actividad"].str.contains(act_nombre, regex=False, case=False, na=False) |
+                df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
             )
         ]
         alcanzado_abs = len(df_act)
@@ -838,8 +838,8 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
             df_act = df_filtered[
                 (df_filtered["ONG"] == s_nombre) &
                 (
-                    df_filtered["Actividad"].str.contains(act_nombre, case=False, na=False) |
-                    df_filtered["Sector"].str.contains(sec, case=False, na=False)
+                    df_filtered["Actividad"].str.contains(act_nombre, regex=False, case=False, na=False) |
+                    df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
                 )
             ]
             alcanzado_abs = len(df_act)
@@ -867,10 +867,8 @@ if not df_reporte_act.empty:
             "Alcanzado (Impactados)": "{:,}",
             "Alcanzado (Únicos)": "{:,}",
             "% Avance Socio": "{:.1f}%"
-        }).background_gradient(
-            subset=["% Avance Socio"], cmap="YlGn", vmin=0, vmax=100
-        ),
-        use_container_width=True,
+        }),
+        width="stretch",
         hide_index=True
     )
 else:
