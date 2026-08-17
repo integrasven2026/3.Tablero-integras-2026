@@ -844,8 +844,9 @@ if not df_reporte_act.empty:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    fig_act_bars.update_xaxes(title_text="Alcanzados (Servicios / Personas)", secondary_y=False)
-    fig_act_bars.update_xaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
+    fig_act_bars.update_xaxes(title_text="Alcanzados (Servicios / Personas)")
+    fig_act_bars.update_yaxes(title_text="Actividad", secondary_y=False)
+    fig_act_bars.update_yaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
 
     st.plotly_chart(fig_act_bars, width="stretch")
 else:
