@@ -30,7 +30,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inyección de Fuentes: Quicksand y Now (o Montserrat como fallback)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Quicksand:wght@600;700&display=swap');
@@ -183,7 +182,6 @@ MAPA_INDICADORES = {
     "R5SI": "R5SI: Sin indicador"
 }
 
-# DICCIONARIO DE METAS DEL PROYECTO
 METAS_INDICADORES = {
     "R1I2": {"meta": 883.8, "tipo": "numero", "etiqueta": "90% de 982 (884 pers.)"},
     "R1I3": {"meta": 910, "tipo": "numero", "etiqueta": "910"},
@@ -221,7 +219,7 @@ def extraer_valor_booleano(diccionario_beneficiario, lista_posibles_claves):
     return 0
 
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL)
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL Y AAP)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
@@ -357,7 +355,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         
     return df
 
-# CARGA DE DATOS DEL FORMULARIO AAP / PQRS
+# CARGA DE DATOS AAP / PQRS
 @st.cache_data(ttl=3600)
 def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.org"):
     headers = {"Authorization": f"Token {token_aap}"}
@@ -376,19 +374,47 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
 
     aap_rows = []
     for r in data:
-        # Búsqueda dinámica de campos clave en Kobo
+        # Extraer canal basándose explícitamente en la variable Kobo "Tipo / Categoria PQRS / Canal" y fallback
         canal = (
-            r.get("canal") or r.get("canal_recepcion") or r.get("medio") or r.get("group_pqrs/canal") or "Sin especificar"
+            r.get("Tipo / Categoria PQRS / Canal") or 
+            r.get("group_pqrs/canal") or 
+            r.get("canal") or 
+            r.get("canal_recepcion") or 
+            r.get("medio") or 
+            "Sin especificar"
         )
         tipo_pqrs = (
-            r.get("tipo") or r.get("tipo_pqrs") or r.get("clasificacion") or r.get("group_pqrs/tipo") or "Información"
+            r.get("Tipo / Categoria PQRS / Tipo") or
+            r.get("tipo") or 
+            r.get("tipo_pqrs") or 
+            r.get("clasificacion") or 
+            r.get("group_pqrs/tipo") or 
+            "Información"
         )
         estado_caso = (
-            r.get("estado") or r.get("estado_caso") or r.get("seguimiento") or r.get("group_pqrs/estado") or "Recibido"
+            r.get("estado") or 
+            r.get("estado_caso") or 
+            r.get("seguimiento") or 
+            r.get("group_pqrs/estado") or 
+            "Recibido"
         )
         fecha_aap = r.get("fecha") or r.get("fecha_recepcion") or r.get("_submission_time")
         
+        socio_val = str(r.get("ong") or r.get("socio") or r.get("group_pqrs/socio") or "COOPI").upper().strip()
+
+        # Demografía AAP
         discapacidad = extraer_valor_booleano(r, ["discapacidad", "discapaz", "pcd"])
+        indigena = extraer_valor_booleano(r, ["indigena", "poblacion_indigena", "etnia"])
+        lgbtiq = extraer_valor_booleano(r, ["lgbtiq", "lgbt", "poblacion_lgbtiq"])
+        
+        sexo_raw = str(r.get("sexo") or r.get("group_pqrs/sexo") or "").lower().strip()
+        try:
+            edad = float(r.get("edad") or r.get("group_pqrs/edad") or 0)
+        except (ValueError, TypeError):
+            edad = 0
+            
+        es_nina = 1 if (edad < 18 and edad > 0 and sexo_raw in ["femenino", "f", "mujer"]) or ("niña" in str(r).lower()) else 0
+        es_nino = 1 if (edad < 18 and edad > 0 and sexo_raw in ["masculino", "m", "hombre"]) or ("niño" in str(r).lower()) else 0
 
         aap_rows.append({
             "_id": r.get("_id"),
@@ -397,7 +423,11 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
             "Estado_Caso": str(estado_caso).replace("_", " ").title(),
             "Fecha": fecha_aap,
             "Discapacidad": discapacidad,
-            "Socio": str(r.get("ong") or r.get("socio") or "COOPI").upper().strip(),
+            "Indigena": indigena,
+            "LGBTIQ": lgbtiq,
+            "Es_Nina": es_nina,
+            "Es_Nino": es_nino,
+            "Socio": socio_val,
             "Estado_Geo": MAPA_ESTADOS.get(str(r.get("estado_geo") or r.get("estado") or ""), "General")
         })
 
@@ -428,7 +458,7 @@ TOKEN_AAP = "a18c017a2e697f4ea1272375dae261ccec6b19d7"
 df_aap_raw = cargar_datos_aap(ASSET_ID_AAP, TOKEN_AAP)
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES CON BOTÓN DE LIMPIEZA Y FILTRO POR SEXO
+# 3. FILTROS LATERALES
 # -----------------------------------------------------------------------------
 st.sidebar.header("Sincronización en Tiempo Real")
 
@@ -458,13 +488,12 @@ with col_btn2:
     st.button("🧹 Limpiar Filtros", on_click=borrar_filtros, width="stretch")
 
 st.sidebar.markdown("---")
-st.sidebar.header("Filtros de Consulta")
+st.sidebar.header("Filtros de Consulta General")
 
 if df_raw.empty:
     st.warning("No se encontraron registros en el formulario de KoboToolbox.")
     st.stop()
 
-# Filtro Mes del Reporte
 meses_ordenados = sorted([m for m in df_raw["Mes_Reporte"].unique() if m != "Sin Fecha"])
 if "Sin Fecha" in df_raw["Mes_Reporte"].values:
     meses_ordenados.append("Sin Fecha")
@@ -484,7 +513,6 @@ muni_sel = st.sidebar.selectbox("Municipio:", munis_disp, key="f_muni")
 sectores_disp = ["Todos"] + sorted([x for x in df_raw["Sector"].dropna().unique() if x])
 sector_sel = st.sidebar.selectbox("Sector de Implementación:", sectores_disp, key="f_sector")
 
-# FILTRO DE SEXO
 sexo_disp = ["Todos", "Hombre", "Mujer", "Otro"]
 sexo_sel = st.sidebar.selectbox("Sexo del Participante:", sexo_disp, key="f_sexo")
 
@@ -799,7 +827,6 @@ st.markdown("---")
 # -----------------------------------------------------------------------------
 st.subheader("Seguimiento de Actividades por Socio y Sector")
 
-# Definición de metas por actividad y socio (Marco Lógico Consorcio INTEGRAS)
 METAS_ACTIVIDADES = {
     "General Protection Case Management": {
         "Sector": "Protección",
@@ -944,25 +971,44 @@ st.markdown("---")
 st.markdown("<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>", unsafe_allow_html=True)
 st.caption("Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio Integras")
 
-# Aplicar filtros globales al DataFrame de AAP
-df_aap_filtered = df_aap_raw.copy()
-if not df_aap_filtered.empty:
-    if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
-        df_aap_filtered = df_aap_filtered[df_aap_filtered["Mes_Reporte"] == mes_sel]
-    if socio_sel != "Todos" and "Socio" in df_aap_filtered.columns:
-        df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_sel]
-    if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
-        df_aap_filtered = df_aap_filtered[df_aap_filtered["Estado_Geo"] == estado_sel]
+# FILTRO PROPIO POR SOCIO PARA AAP
+lista_socios_aap = ["TODOS"] + sorted(list(set(df_aap_raw["Socio"].unique()).union({"COOPI", "HIAS", "FLM", "PALUZ", "PLAFAM"})))
 
+col_f_aap1, col_f_aap2 = st.columns([1, 3])
+with col_f_aap1:
+    socio_aap_sel = st.selectbox("Filtrar Reporte AAP por Socio:", options=lista_socios_aap, index=0)
+
+df_aap_filtered = df_aap_raw.copy()
+
+# Aplicación de Filtros al reporte AAP
+if socio_aap_sel != "TODOS":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_aap_sel]
+elif socio_sel != "Todos":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_sel]
+
+if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Mes_Reporte"] == mes_sel]
+if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Estado_Geo"] == estado_sel]
+
+# MÉTIRCAS AAP EXPANDIDAS
 total_pqrs = len(df_aap_filtered)
 disc_pqrs = int(df_aap_filtered["Discapacidad"].sum()) if "Discapacidad" in df_aap_filtered.columns else 0
+ninas_pqrs = int(df_aap_filtered["Es_Nina"].sum()) if "Es_Nina" in df_aap_filtered.columns else 0
+ninos_pqrs = int(df_aap_filtered["Es_Nino"].sum()) if "Es_Nino" in df_aap_filtered.columns else 0
+indig_pqrs = int(df_aap_filtered["Indigena"].sum()) if "Indigena" in df_aap_filtered.columns else 0
+lgbtiq_pqrs = int(df_aap_filtered["LGBTIQ"].sum()) if "LGBTIQ" in df_aap_filtered.columns else 0
 
-# Fila 1: Métricas principales
-col_a1, col_a2 = st.columns([1, 1])
-with col_a1:
-    st.metric("Total de PQRS", f"{total_pqrs:,}")
-with col_a2:
-    st.metric("Discapacidad Total (PQRS)", f"{disc_pqrs:,}" if disc_pqrs > 0 else "--")
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Fila de 6 Tarjetas Métricas
+m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
+m_col1.metric("Total PQRS", f"{total_pqrs:,}")
+m_col2.metric("Discapacidad", f"{disc_pqrs:,}")
+m_col3.metric("Niñas", f"{ninas_pqrs:,}")
+m_col4.metric("Niños", f"{ninos_pqrs:,}")
+m_col5.metric("Com. Indígena", f"{indig_pqrs:,}")
+m_col6.metric("LGBTIQ+", f"{lgbtiq_pqrs:,}")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
