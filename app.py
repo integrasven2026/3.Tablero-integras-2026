@@ -819,8 +819,7 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
                 df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
             )
         ]
-        alcanzado_abs = len(df_act)
-        alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else alcanzado_abs
+        alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
         pct = (alcanzado_unicos / meta_socio * 100) if meta_socio > 0 else 0.0
 
         filas_reporte.append({
@@ -829,33 +828,28 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
             "Socio": socio_reporte,
             "Meta Proyecto": meta_proy,
             "Meta Socio": meta_socio,
-            "Alcanzado (Impactados)": alcanzado_abs,
             "Alcanzado (Únicos)": alcanzado_unicos,
             "% Avance Socio": round(pct, 1)
         })
     else:
-        for s_nombre, meta_socio in metas_socios.items():
-            df_act = df_filtered[
-                (df_filtered["ONG"] == s_nombre) &
-                (
-                    df_filtered["Actividad"].str.contains(act_nombre, regex=False, case=False, na=False) |
-                    df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
-                )
-            ]
-            alcanzado_abs = len(df_act)
-            alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else alcanzado_abs
-            pct = (alcanzado_unicos / meta_socio * 100) if meta_socio > 0 else 0.0
+        # Al filtrar por TODOS: Se agrupa por actividad consolidada,
+        # asignando como Meta Socio la Meta Proyecto completa.
+        df_act = df_filtered[
+            df_filtered["Actividad"].str.contains(act_nombre, regex=False, case=False, na=False) |
+            df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
+        ]
+        alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
+        pct = (alcanzado_unicos / meta_proy * 100) if meta_proy > 0 else 0.0
 
-            filas_reporte.append({
-                "Sector": sec,
-                "Actividad": act_nombre,
-                "Socio": s_nombre,
-                "Meta Proyecto": meta_proy,
-                "Meta Socio": meta_socio,
-                "Alcanzado (Impactados)": alcanzado_abs,
-                "Alcanzado (Únicos)": alcanzado_unicos,
-                "% Avance Socio": round(pct, 1)
-            })
+        filas_reporte.append({
+            "Sector": sec,
+            "Actividad": act_nombre,
+            "Socio": "TODOS (Consorcio)",
+            "Meta Proyecto": meta_proy,
+            "Meta Socio": meta_proy,
+            "Alcanzado (Únicos)": alcanzado_unicos,
+            "% Avance Socio": round(pct, 1)
+        })
 
 df_reporte_act = pd.DataFrame(filas_reporte)
 
@@ -864,7 +858,6 @@ if not df_reporte_act.empty:
         df_reporte_act.style.format({
             "Meta Proyecto": "{:,}",
             "Meta Socio": "{:,}",
-            "Alcanzado (Impactados)": "{:,}",
             "Alcanzado (Únicos)": "{:,}",
             "% Avance Socio": "{:.1f}%"
         }),
