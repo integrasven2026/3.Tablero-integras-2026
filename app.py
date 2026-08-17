@@ -698,6 +698,10 @@ if 'f_sector' not in st.session_state:
   st.session_state.f_sector = 'Todos'
 if 'f_sexo' not in st.session_state:
   st.session_state.f_sexo = 'Todos'
+if 'f_grupo_demo' not in st.session_state:
+  st.session_state.f_grupo_demo = 'Todos'
+if 'f_necesidad_esp' not in st.session_state:
+  st.session_state.f_necesidad_esp = 'Todos'
 
 
 def borrar_filtros():
@@ -707,6 +711,8 @@ def borrar_filtros():
   st.session_state.f_muni = 'Todos'
   st.session_state.f_sector = 'Todos'
   st.session_state.f_sexo = 'Todos'
+  st.session_state.f_grupo_demo = 'Todos'
+  st.session_state.f_necesidad_esp = 'Todos'
 
 
 with col_btn2:
@@ -755,6 +761,22 @@ sexo_sel = st.sidebar.selectbox(
     'Sexo del Participante:', sexo_disp, key='f_sexo'
 )
 
+grupo_demo_disp = ['Todos', 'Mujer', 'Hombre', 'Niña', 'Niño']
+grupo_demo_sel = st.sidebar.selectbox(
+    'Grupo Demográfico:', grupo_demo_disp, key='f_grupo_demo'
+)
+
+necesidad_esp_disp = [
+    'Todos',
+    'Personas con Discapacidad',
+    'Comunidad Indígena',
+    'Embarazada / Lactante',
+    'Población LGBTIQ+',
+]
+necesidad_esp_sel = st.sidebar.selectbox(
+    'Necesidad Específica:', necesidad_esp_disp, key='f_necesidad_esp'
+)
+
 # Aplicar Filtros Generales
 df_filtered = df_raw.copy()
 if mes_sel != 'Todos':
@@ -769,6 +791,17 @@ if sector_sel != 'Todos':
   df_filtered = df_filtered[df_filtered['Sector'] == sector_sel]
 if sexo_sel != 'Todos':
   df_filtered = df_filtered[df_filtered['Sexo'] == sexo_sel]
+if grupo_demo_sel != 'Todos':
+  df_filtered = df_filtered[df_filtered['Grupo_Demografico'] == grupo_demo_sel]
+
+if necesidad_esp_sel == 'Personas con Discapacidad':
+  df_filtered = df_filtered[df_filtered['Es_Discapacidad'] == 1]
+elif necesidad_esp_sel == 'Comunidad Indígena':
+  df_filtered = df_filtered[df_filtered['Es_Indigena'] == 1]
+elif necesidad_esp_sel == 'Embarazada / Lactante':
+  df_filtered = df_filtered[df_filtered['Es_Embarazada_Lactante'] == 1]
+elif necesidad_esp_sel == 'Población LGBTIQ+':
+  df_filtered = df_filtered[df_filtered['Es_LGBTIQ'] == 1]
 
 # -----------------------------------------------------------------------------
 # 4. MÉTRICAS CLAVE
@@ -783,59 +816,6 @@ col1, col2, col3 = st.columns(3)
 col1.metric('Total de Servicios a Participantes', f'{total_impactados:,}')
 col2.metric('Total Participantes Únicos', f'{total_unicos:,}')
 col3.metric('% Alcance de la Meta (46.122 pers.)', f'{pct_meta:.2f}%')
-
-st.markdown('---')
-
-# -----------------------------------------------------------------------------
-# 5. GRUPOS DEMOGRÁFICOS Y NECESIDADES ESPECÍFICAS
-# -----------------------------------------------------------------------------
-st.subheader('Grupos Demográficos y Necesidades Específicas')
-
-if total_unicos > 0 and 'Grupo_Demografico' in df_unicos.columns:
-  counts_u = df_unicos['Grupo_Demografico'].value_counts()
-
-  p_mujeres = (counts_u.get('Mujer', 0) / total_unicos) * 100
-  p_hombres = (counts_u.get('Hombre', 0) / total_unicos) * 100
-  p_ninas = (counts_u.get('Niña', 0) / total_unicos) * 100
-  p_ninos = (counts_u.get('Niño', 0) / total_unicos) * 100
-
-  d1, d2, d3, d4 = st.columns(4)
-  d1.metric('% Mujeres (≥18 años)', f'{p_mujeres:.1f}%')
-  d2.metric('% Hombres (≥18 años)', f'{p_hombres:.1f}%')
-  d3.metric('% Niñas (<18 años)', f'{p_ninas:.1f}%')
-  d4.metric('% Niños (<18 años)', f'{p_ninos:.1f}%')
-
-st.markdown('#### Personas con Necesidades Específicas')
-
-cnt_disc = (
-    int(df_unicos['Es_Discapacidad'].sum())
-    if 'Es_Discapacidad' in df_unicos.columns
-    else 0
-)
-cnt_indig = (
-    int(df_unicos['Es_Indigena'].sum())
-    if 'Es_Indigena' in df_unicos.columns
-    else 0
-)
-cnt_emb = (
-    int(df_unicos['Es_Embarazada_Lactante'].sum())
-    if 'Es_Embarazada_Lactante' in df_unicos.columns
-    else 0
-)
-cnt_lgbtiq = (
-    int(df_unicos['Es_LGBTIQ'].sum()) if 'Es_LGBTIQ' in df_unicos.columns else 0
-)
-
-p_disc = (cnt_disc / total_unicos * 100) if total_unicos > 0 else 0
-p_indig = (cnt_indig / total_unicos * 100) if total_unicos > 0 else 0
-p_emb = (cnt_emb / total_unicos * 100) if total_unicos > 0 else 0
-p_lgbtiq = (cnt_lgbtiq / total_unicos * 100) if total_unicos > 0 else 0
-
-ne1, ne2, ne3, ne4 = st.columns(4)
-ne1.metric('Personas con Discapacidad', f'{cnt_disc:,}', f'{p_disc:.1f}%')
-ne2.metric('Comunidad Indígena', f'{cnt_indig:,}', f'{p_indig:.1f}%')
-ne3.metric('Embarazada / Lactante', f'{cnt_emb:,}', f'{p_emb:.1f}%')
-ne4.metric('Población LGBTIQ+', f'{cnt_lgbtiq:,}', f'{p_lgbtiq:.1f}%')
 
 st.markdown('---')
 
