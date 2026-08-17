@@ -577,7 +577,8 @@ total_unicos = len(df_unicos)
 pct_meta = (total_unicos / META_PARTICIPANTES_UNICOS) * 100
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Impactados (Admite duplicidad)", f"{total_impactados:,}")
+# CAMBIO 1: Título actualizado
+col1.metric("Total de Servicios a Participantes", f"{total_impactados:,}")
 col2.metric("Total Participantes Únicos", f"{total_unicos:,}")
 col3.metric("% Alcance de la Meta (46.122 pers.)", f"{pct_meta:.2f}%")
 
@@ -623,244 +624,9 @@ ne4.metric("Población LGBTIQ+", f"{cnt_lgbtiq:,}", f"{p_lgbtiq:.1f}%")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 6. TABLA DESGLOSE DE INDICADORES
+# 6. SEGUIMIENTO A LAS ACTIVIDADES DEL CONSORCIO (REPORTE PARA SOCIOS)
 # -----------------------------------------------------------------------------
-st.subheader("Desglose de Indicadores del Proyecto")
-
-if total_impactados > 0:
-    records_ind = []
-    for idx, row in df_filtered.iterrows():
-        codigos = row.get("Indicadores_Codigos", [])
-        sector_actual = row.get("Sector", "Sin Sector")
-        
-        if isinstance(codigos, list) and len(codigos) > 0:
-            for cod in codigos:
-                records_ind.append({
-                    "Sector": sector_actual,
-                    "Codigo_Ind": cod,
-                    "Indicador": MAPA_INDICADORES.get(cod, cod),
-                    "ID_Unico": row.get("ID_Unico")
-                })
-        else:
-            records_ind.append({
-                "Sector": sector_actual,
-                "Codigo_Ind": "SI",
-                "Indicador": f"Sin indicador ({sector_actual})",
-                "ID_Unico": row.get("ID_Unico")
-            })
-            
-    df_ind_flat = pd.DataFrame(records_ind)
-    
-    summary_ind = df_ind_flat.groupby(["Sector", "Codigo_Ind", "Indicador"]).agg(
-        Valor_Absoluto=("ID_Unico", "count"),
-        Participantes_Unicos=("ID_Unico", "nunique")
-    ).reset_index()
-    
-    summary_ind["Porcentaje_Total"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
-    
-    def obtener_meta_info(cod):
-        meta_data = METAS_INDICADORES.get(cod)
-        if meta_data:
-            return meta_data["etiqueta"], meta_data["meta"], meta_data["tipo"]
-        return "N/A", None, "ninguno"
-
-    meta_etiquetas = []
-    alcance_porcentajes = []
-
-    for _, row_ind in summary_ind.iterrows():
-        cod = row_ind["Codigo_Ind"]
-        etiqueta_meta, valor_meta, tipo_meta = obtener_meta_info(cod)
-        meta_etiquetas.append(etiqueta_meta)
-        
-        if valor_meta and valor_meta > 0:
-            if tipo_meta == "numero":
-                alcance = (row_ind["Participantes_Unicos"] / valor_meta) * 100
-                alcance_porcentajes.append(f"{alcance:.1f}%")
-            elif tipo_meta == "porcentaje":
-                alcance_porcentajes.append(f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})")
-        else:
-            alcance_porcentajes.append("N/A")
-
-    summary_ind["Meta del Proyecto"] = meta_etiquetas
-    summary_ind["% Alcance del Indicador"] = alcance_porcentajes
-    summary_ind["% del Total"] = summary_ind["Porcentaje_Total"].map("{:.1f}%".format)
-    
-    summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
-    
-    cols_ordenadas = [
-        "Sector", 
-        "Indicador", 
-        "Valor_Absoluto", 
-        "% del Total", 
-        "Meta del Proyecto", 
-        "% Alcance del Indicador"
-    ]
-
-    df_mostrar = summary_ind[cols_ordenadas].rename(columns={
-        "Sector": "Sector",
-        "Indicador": "Indicador del Proyecto",
-        "Valor_Absoluto": "Valor Absoluto (Impactados)",
-        "% del Total": "% del Total",
-        "Meta del Proyecto": "Meta del Proyecto",
-        "% Alcance del Indicador": "% Alcance del Indicador"
-    })
-    
-    st.dataframe(
-        df_mostrar,
-        width="stretch",
-        hide_index=True
-    )
-
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df_mostrar.to_excel(writer, index=False, sheet_name='Indicadores')
-    buffer.seek(0)
-
-    st.download_button(
-        label="📥 Descargar Desglose de Indicadores en Excel",
-        data=buffer,
-        file_name="Desglose_Indicadores_Consorcio_Integras.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-st.markdown("---")
-
-# -----------------------------------------------------------------------------
-# 7. GRÁFICOS INTERACTIVOS (POR PARTICIPANTES ÚNICOS)
-# -----------------------------------------------------------------------------
-g1, g2 = st.columns(2)
-
-font_layout = dict(family="Quicksand", size=13)
-
-with g1:
-    st.subheader("Desglose por Sexo y Rango Etario (Participantes Únicos)")
-    if total_unicos > 0 and "Grupo_Demografico" in df_unicos.columns:
-        df_demo = df_unicos.groupby("Grupo_Demografico").size().reset_index(name="Cantidad")
-        df_demo["Porcentaje"] = (df_demo["Cantidad"] / total_unicos) * 100
-        df_demo["Etiqueta"] = df_demo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
-        
-        fig_bar = px.bar(
-            df_demo, 
-            x="Grupo_Demografico", 
-            y="Cantidad", 
-            color="Grupo_Demografico",
-            text="Etiqueta",
-            title="Participantes Únicos por Rango Etario y Sexo",
-            color_discrete_sequence=PALETA_INTEGRAS
-        )
-        fig_bar.update_traces(textposition="outside")
-        fig_bar.update_layout(
-            showlegend=False,
-            font=font_layout,
-            title_font=dict(family="Now, Montserrat", size=16)
-        )
-        st.plotly_chart(fig_bar, width="stretch")
-
-with g2:
-    st.subheader("Participantes Únicos por Sector")
-    if total_unicos > 0 and "Sector" in df_filtered.columns:
-        df_sec_unicos = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"])
-        df_sec_cnt = df_sec_unicos["Sector"].value_counts().reset_index()
-        df_sec_cnt.columns = ["Sector", "Unicos"]
-        
-        fig_pie = px.pie(
-            df_sec_cnt, 
-            values="Unicos", 
-            names="Sector",
-            hole=0.4,
-            title="Distribución por Sector de Implementación",
-            color_discrete_sequence=PALETA_INTEGRAS
-        )
-        fig_pie.update_traces(textinfo="label+value+percent")
-        fig_pie.update_layout(
-            showlegend=False,
-            font=font_layout,
-            title_font=dict(family="Now, Montserrat", size=16)
-        )
-        st.plotly_chart(fig_pie, width="stretch")
-
-st.markdown("---")
-
-# -----------------------------------------------------------------------------
-# 8. UBICACIÓN GEOGRÁFICA Y MAPA
-# -----------------------------------------------------------------------------
-st.subheader("Ubicación Geográfica por Municipio")
-
-m1, m2 = st.columns([1, 1])
-
-with m1:
-    st.markdown("### Participantes Únicos por Municipio")
-    if total_unicos > 0 and "Municipio" in df_unicos.columns:
-        df_muni = df_unicos.groupby(["Estado", "Municipio"]).size().reset_index(name="Participantes_Unicos")
-        df_muni["Porcentaje"] = (df_muni["Participantes_Unicos"] / total_unicos) * 100
-        df_muni["Etiqueta"] = df_muni.apply(lambda r: f"{r['Participantes_Unicos']} ({r['Porcentaje']:.1f}%)", axis=1)
-        df_muni = df_muni.sort_values(by="Participantes_Unicos", ascending=True)
-        
-        fig_muni = px.bar(
-            df_muni,
-            y="Municipio",
-            x="Participantes_Unicos",
-            color="Estado",
-            orientation="h",
-            text="Etiqueta",
-            height=400,
-            color_discrete_sequence=PALETA_INTEGRAS
-        )
-        fig_muni.update_traces(textposition="outside")
-        fig_muni.update_layout(
-            showlegend=False,
-            font=font_layout
-        )
-        st.plotly_chart(fig_muni, width="stretch")
-
-with m2:
-    st.markdown("### Cobertura de la Intervención")
-    
-    mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
-    
-    if total_unicos > 0:
-        mapa_df = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"]).groupby(["Estado", "Municipio", "Sector"]).size().reset_index(name="Cantidad")
-        muni_totales = df_unicos.groupby(["Estado", "Municipio"]).size().reset_index(name="Total_Unicos")
-        
-        for idx, m_row in muni_totales.iterrows():
-            est = m_row["Estado"]
-            mun = m_row["Municipio"]
-            tot = m_row["Total_Unicos"]
-            
-            coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
-            
-            sectores_muni = mapa_df[(mapa_df["Estado"] == est) & (mapa_df["Municipio"] == mun)]
-            sec_html = "".join([f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas únicas</li>" for _, r in sectores_muni.iterrows()])
-            
-            popup_content = f"""
-            <div style='font-family: Quicksand, sans-serif; font-weight: 700; font-size: 12px; width: 200px;'>
-                <h4 style='font-family: Now, Montserrat, sans-serif; margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
-                <b>Estado:</b> {est}<br>
-                <b>Participantes Únicos:</b> {tot}<br><br>
-                <b>Desglose por Sector:</b>
-                <ul style='margin-top: 5px; padding-left: 15px;'>
-                    {sec_html}
-                </ul>
-            </div>
-            """
-            
-            folium.CircleMarker(
-                location=coords,
-                radius=min(tot * 3, 20) + 6,
-                popup=folium.Popup(popup_content, max_width=250),
-                color=COLOR_AGUAMARINA,
-                fill=True,
-                fill_color=COLOR_AGUAMARINA,
-                fill_opacity=0.7
-            ).add_to(mapa)
-            
-    st_folium(mapa, width=500, height=380)
-
-st.markdown("---")
-
-# -----------------------------------------------------------------------------
-# 9. SEGUIMIENTO A LAS ACTIVIDADES DEL CONSORCIO (REPORTE PARA SOCIOS)
-# -----------------------------------------------------------------------------
+# CAMBIO 2: Reubicado a esta posición
 st.subheader("Seguimiento de Actividades por Socio y Sector")
 
 METAS_ACTIVIDADES = {
@@ -1002,6 +768,246 @@ else:
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
+# 7. GRÁFICOS INTERACTIVOS (POR PARTICIPANTES ÚNICOS)
+# -----------------------------------------------------------------------------
+g1, g2 = st.columns(2)
+
+font_layout = dict(family="Quicksand", size=13)
+
+with g1:
+    st.subheader("Desglose por Sexo y Rango Etario (Participantes Únicos)")
+    if total_unicos > 0 and "Grupo_Demografico" in df_unicos.columns:
+        df_demo = df_unicos.groupby("Grupo_Demografico").size().reset_index(name="Cantidad")
+        
+        # CAMBIO 3: Cambiado de Barras a Gráfico de Torta / Dona
+        fig_pie_demo = px.pie(
+            df_demo, 
+            values="Cantidad", 
+            names="Grupo_Demografico",
+            hole=0.4,
+            title="Participantes Únicos por Rango Etario y Sexo",
+            color_discrete_sequence=PALETA_INTEGRAS
+        )
+        fig_pie_demo.update_traces(textinfo="label+value+percent")
+        fig_pie_demo.update_layout(
+            showlegend=True,
+            font=font_layout,
+            title_font=dict(family="Now, Montserrat", size=16)
+        )
+        st.plotly_chart(fig_pie_demo, width="stretch")
+
+with g2:
+    st.subheader("Participantes Únicos por Sector")
+    if total_unicos > 0 and "Sector" in df_filtered.columns:
+        df_sec_unicos = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"])
+        df_sec_cnt = df_sec_unicos["Sector"].value_counts().reset_index()
+        df_sec_cnt.columns = ["Sector", "Unicos"]
+        
+        df_sec_cnt["Porcentaje"] = (df_sec_cnt["Unicos"] / total_unicos) * 100
+        df_sec_cnt["Etiqueta"] = df_sec_cnt.apply(lambda r: f"{r['Unicos']} ({r['Porcentaje']:.0f}%)", axis=1)
+        
+        # CAMBIO 3: Cambiado de Torta a Gráfico de Barras
+        fig_bar_sec = px.bar(
+            df_sec_cnt, 
+            x="Sector", 
+            y="Unicos", 
+            color="Sector",
+            text="Etiqueta",
+            title="Distribución por Sector de Implementación",
+            color_discrete_sequence=PALETA_INTEGRAS
+        )
+        fig_bar_sec.update_traces(textposition="outside")
+        fig_bar_sec.update_layout(
+            showlegend=False,
+            font=font_layout,
+            title_font=dict(family="Now, Montserrat", size=16)
+        )
+        st.plotly_chart(fig_bar_sec, width="stretch")
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
+# 8. UBICACIÓN GEOGRÁFICA Y MAPA
+# -----------------------------------------------------------------------------
+st.subheader("Ubicación Geográfica por Municipio")
+
+m1, m2 = st.columns([1, 1])
+
+with m1:
+    st.markdown("### Participantes Únicos por Municipio")
+    if total_unicos > 0 and "Municipio" in df_unicos.columns:
+        df_muni = df_unicos.groupby(["Estado", "Municipio"]).size().reset_index(name="Participantes_Unicos")
+        df_muni["Porcentaje"] = (df_muni["Participantes_Unicos"] / total_unicos) * 100
+        df_muni["Etiqueta"] = df_muni.apply(lambda r: f"{r['Participantes_Unicos']} ({r['Porcentaje']:.1f}%)", axis=1)
+        df_muni = df_muni.sort_values(by="Participantes_Unicos", ascending=True)
+        
+        fig_muni = px.bar(
+            df_muni,
+            y="Municipio",
+            x="Participantes_Unicos",
+            color="Estado",
+            orientation="h",
+            text="Etiqueta",
+            height=400,
+            color_discrete_sequence=PALETA_INTEGRAS
+        )
+        fig_muni.update_traces(textposition="outside")
+        fig_muni.update_layout(
+            showlegend=False,
+            font=font_layout
+        )
+        st.plotly_chart(fig_muni, width="stretch")
+
+with m2:
+    st.markdown("### Cobertura de la Intervención")
+    
+    mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles="CartoDB positron")
+    
+    if total_unicos > 0:
+        mapa_df = df_filtered.drop_duplicates(subset=["ID_Unico", "Sector"]).groupby(["Estado", "Municipio", "Sector"]).size().reset_index(name="Cantidad")
+        muni_totales = df_unicos.groupby(["Estado", "Municipio"]).size().reset_index(name="Total_Unicos")
+        
+        for idx, m_row in muni_totales.iterrows():
+            est = m_row["Estado"]
+            mun = m_row["Municipio"]
+            tot = m_row["Total_Unicos"]
+            
+            coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
+            
+            sectores_muni = mapa_df[(mapa_df["Estado"] == est) & (mapa_df["Municipio"] == mun)]
+            sec_html = "".join([f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas únicas</li>" for _, r in sectores_muni.iterrows()])
+            
+            popup_content = f"""
+            <div style='font-family: Quicksand, sans-serif; font-weight: 700; font-size: 12px; width: 200px;'>
+                <h4 style='font-family: Now, Montserrat, sans-serif; margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
+                <b>Estado:</b> {est}<br>
+                <b>Participantes Únicos:</b> {tot}<br><br>
+                <b>Desglose por Sector:</b>
+                <ul style='margin-top: 5px; padding-left: 15px;'>
+                    {sec_html}
+                </ul>
+            </div>
+            """
+            
+            folium.CircleMarker(
+                location=coords,
+                radius=min(tot * 3, 20) + 6,
+                popup=folium.Popup(popup_content, max_width=250),
+                color=COLOR_AGUAMARINA,
+                fill=True,
+                fill_color=COLOR_AGUAMARINA,
+                fill_opacity=0.7
+            ).add_to(mapa)
+            
+    st_folium(mapa, width=500, height=380)
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
+# 9. TABLA DESGLOSE DE INDICADORES DEL PROYECTO
+# -----------------------------------------------------------------------------
+# CAMBIO 2: Reubicado a esta posición (donde estaba Seguimiento de Actividades)
+st.subheader("Desglose de Indicadores del Proyecto")
+
+if total_impactados > 0:
+    records_ind = []
+    for idx, row in df_filtered.iterrows():
+        codigos = row.get("Indicadores_Codigos", [])
+        sector_actual = row.get("Sector", "Sin Sector")
+        
+        if isinstance(codigos, list) and len(codigos) > 0:
+            for cod in codigos:
+                records_ind.append({
+                    "Sector": sector_actual,
+                    "Codigo_Ind": cod,
+                    "Indicador": MAPA_INDICADORES.get(cod, cod),
+                    "ID_Unico": row.get("ID_Unico")
+                })
+        else:
+            records_ind.append({
+                "Sector": sector_actual,
+                "Codigo_Ind": "SI",
+                "Indicador": f"Sin indicador ({sector_actual})",
+                "ID_Unico": row.get("ID_Unico")
+            })
+            
+    df_ind_flat = pd.DataFrame(records_ind)
+    
+    summary_ind = df_ind_flat.groupby(["Sector", "Codigo_Ind", "Indicador"]).agg(
+        Valor_Absoluto=("ID_Unico", "count"),
+        Participantes_Unicos=("ID_Unico", "nunique")
+    ).reset_index()
+    
+    summary_ind["Porcentaje_Total"] = (summary_ind["Participantes_Unicos"] / total_unicos) * 100
+    
+    def obtener_meta_info(cod):
+        meta_data = METAS_INDICADORES.get(cod)
+        if meta_data:
+            return meta_data["etiqueta"], meta_data["meta"], meta_data["tipo"]
+        return "N/A", None, "ninguno"
+
+    meta_etiquetas = []
+    alcance_porcentajes = []
+
+    for _, row_ind in summary_ind.iterrows():
+        cod = row_ind["Codigo_Ind"]
+        etiqueta_meta, valor_meta, tipo_meta = obtener_meta_info(cod)
+        meta_etiquetas.append(etiqueta_meta)
+        
+        if valor_meta and valor_meta > 0:
+            if tipo_meta == "numero":
+                alcance = (row_ind["Participantes_Unicos"] / valor_meta) * 100
+                alcance_porcentajes.append(f"{alcance:.1f}%")
+            elif tipo_meta == "porcentaje":
+                alcance_porcentajes.append(f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})")
+        else:
+            alcance_porcentajes.append("N/A")
+
+    summary_ind["Meta del Proyecto"] = meta_etiquetas
+    summary_ind["% Alcance del Indicador"] = alcance_porcentajes
+    summary_ind["% del Total"] = summary_ind["Porcentaje_Total"].map("{:.1f}%".format)
+    
+    summary_ind = summary_ind.sort_values(by=["Sector", "Valor_Absoluto"], ascending=[True, False])
+    
+    cols_ordenadas = [
+        "Sector", 
+        "Indicador", 
+        "Valor_Absoluto", 
+        "% del Total", 
+        "Meta del Proyecto", 
+        "% Alcance del Indicador"
+    ]
+
+    df_mostrar = summary_ind[cols_ordenadas].rename(columns={
+        "Sector": "Sector",
+        "Indicador": "Indicador del Proyecto",
+        "Valor_Absoluto": "Valor Absoluto (Servicios)",
+        "% del Total": "% del Total",
+        "Meta del Proyecto": "Meta del Proyecto",
+        "% Alcance del Indicador": "% Alcance del Indicador"
+    })
+    
+    st.dataframe(
+        df_mostrar,
+        width="stretch",
+        hide_index=True
+    )
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_mostrar.to_excel(writer, index=False, sheet_name='Indicadores')
+    buffer.seek(0)
+
+    st.download_button(
+        label="📥 Descargar Desglose de Indicadores en Excel",
+        data=buffer,
+        file_name="Desglose_Indicadores_Consorcio_Integras.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
 # 10. REPORTE AAP (RENDICIÓN DE CUENTAS / PQRS)
 # -----------------------------------------------------------------------------
 st.markdown("<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>", unsafe_allow_html=True)
@@ -1088,7 +1094,6 @@ with aap_c1:
         df_canal.columns = ["Canal", "Cantidad"]
         df_canal = df_canal.sort_values(by="Cantidad", ascending=True)
         
-        # Porcentaje como número entero sin decimales
         df_canal["Porcentaje"] = (df_canal["Cantidad"] / total_pqrs) * 100
         df_canal["Etiqueta"] = df_canal.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.0f}%)", axis=1)
         
@@ -1173,7 +1178,6 @@ with aap_c4:
         # EXCLUIR CATEGORÍA "RECIBIDO"
         df_est_aap = df_est_aap[df_est_aap["Estado"].str.lower() != "recibido"]
         
-        # Porcentaje como número entero sin decimales
         df_est_aap["Porcentaje"] = (df_est_aap["Cantidad"] / total_pqrs) * 100
         df_est_aap["Etiqueta"] = df_est_aap.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.0f}%)", axis=1)
         
