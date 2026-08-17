@@ -218,6 +218,16 @@ def extraer_valor_booleano(diccionario_beneficiario, lista_posibles_claves):
                     return 1
     return 0
 
+def extraer_campo_dinamico(row_dict, palabras_clave, valor_defecto="Sin especificar"):
+    """Busca cualquier clave dentro de row_dict que contenga las palabras clave indicadas."""
+    for key, value in row_dict.items():
+        if value is None or str(value).strip() == "":
+            continue
+        key_lower = str(key).lower()
+        if any(pc.lower() in key_lower for pc in palabras_clave):
+            return str(value).strip()
+    return valor_defecto
+
 # -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL Y AAP)
 # -----------------------------------------------------------------------------
@@ -355,7 +365,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         
     return df
 
-# CARGA Y MAPEO EXACTO DE VARIABLES KOBO PARA AAP / PQRS
+# CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP
 @st.cache_data(ttl=3600)
 def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.org"):
     headers = {"Authorization": f"Token {token_aap}"}
@@ -374,42 +384,12 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
 
     aap_rows = []
     for r in data:
-        # 1. Variable exacta Kobo: "Tipo/ Categoria PQRS Canal"
-        canal = (
-            r.get("Tipo/ Categoria PQRS Canal") or 
-            r.get("Tipo/ Categoria PQRS / Canal") or 
-            r.get("Tipo / Categoria PQRS / Canal") or
-            r.get("canal") or 
-            r.get("canal_recepcion") or 
-            "Sin especificar"
-        )
-        
-        # 2. Variable exacta Kobo: "Tipo / Categoria PQRS / Tipo de retroalimentación"
-        tipo_pqrs = (
-            r.get("Tipo / Categoria PQRS / Tipo de retroalimentación") or
-            r.get("Tipo/ Categoria PQRS / Tipo de retroalimentación") or
-            r.get("tipo") or 
-            r.get("tipo_pqrs") or 
-            "Información"
-        )
-        
-        # 3. Variable exacta Kobo: "Estatus del PQRS / Estatus de caso"
-        estado_caso = (
-            r.get("Estatus del PQRS / Estatus de caso") or
-            r.get("Estatus del PQRS/ Estatus de caso") or
-            r.get("estado") or 
-            r.get("estado_caso") or 
-            "Recibido"
-        )
-        
-        # 4. Variable exacta Kobo: Fecha
-        fecha_aap = (
-            r.get("fecha") or 
-            r.get("Fecha") or 
-            r.get("fecha_recepcion") or 
-            r.get("_submission_time")
-        )
-        
+        # Búsqueda dinámica flexible por fragmentos de nombre de columna
+        canal = extraer_campo_dinamico(r, ["canal"], "Buzón")
+        tipo_pqrs = extraer_campo_dinamico(r, ["tipo", "retroalimentacion"], "Información")
+        estado_caso = extraer_campo_dinamico(r, ["estatus", "estado"], "Recibido")
+        fecha_aap = extraer_campo_dinamico(r, ["fecha", "_submission_time"], None)
+
         socio_val = str(r.get("ong") or r.get("socio") or r.get("group_pqrs/socio") or "COOPI").upper().strip()
 
         # Demografía AAP
@@ -1022,7 +1002,7 @@ m_col6.metric("LGBTIQ+", f"{lgbtiq_pqrs:,}")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Gráficos principales AAP (Utilizando diversidad de paleta institucional)
+# Gráficos principales AAP
 aap_c1, aap_c2 = st.columns(2)
 
 with aap_c1:
