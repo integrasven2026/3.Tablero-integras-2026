@@ -1088,8 +1088,9 @@ with aap_c1:
         df_canal.columns = ["Canal", "Cantidad"]
         df_canal = df_canal.sort_values(by="Cantidad", ascending=True)
         
+        # Porcentaje como número entero sin decimales
         df_canal["Porcentaje"] = (df_canal["Cantidad"] / total_pqrs) * 100
-        df_canal["Etiqueta"] = df_canal.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
+        df_canal["Etiqueta"] = df_canal.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.0f}%)", axis=1)
         
         fig_canal = px.bar(
             df_canal,
@@ -1143,7 +1144,7 @@ with aap_c3:
     if total_pqrs > 0 and "Mes_Reporte" in df_aap_filtered.columns:
         df_mes_aap = df_aap_filtered.groupby("Mes_Reporte", sort=False).size().reset_index(name="Atendidos")
         df_mes_aap["Porcentaje"] = (df_mes_aap["Atendidos"] / total_pqrs) * 100
-        df_mes_aap["Etiqueta"] = df_mes_aap.apply(lambda r: f"{r['Atendidos']} ({r['Porcentaje']:.1f}%)", axis=1)
+        df_mes_aap["Etiqueta"] = df_mes_aap.apply(lambda r: f"{r['Atendidos']} ({r['Porcentaje']:.0f}%)", axis=1)
         
         fig_mes_aap = px.area(
             df_mes_aap,
@@ -1168,8 +1169,10 @@ with aap_c4:
     if total_pqrs > 0 and "Estado_Caso" in df_aap_filtered.columns:
         df_est_aap = df_aap_filtered["Estado_Caso"].value_counts().reset_index()
         df_est_aap.columns = ["Estado", "Cantidad"]
+        
+        # Porcentaje como número entero sin decimales
         df_est_aap["Porcentaje"] = (df_est_aap["Cantidad"] / total_pqrs) * 100
-        df_est_aap["Etiqueta"] = df_est_aap.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
+        df_est_aap["Etiqueta"] = df_est_aap.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.0f}%)", axis=1)
         
         MAPA_COLORES_ESTADO = {
             "Abierto": COLOR_VERDE_ABIERTO,
