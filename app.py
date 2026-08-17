@@ -355,7 +355,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url="https://eu.kobotoolbox.org"):
         
     return df
 
-# CARGA DE DATOS AAP / PQRS
+# CARGA Y MAPEO EXACTO DE VARIABLES KOBO PARA AAP / PQRS
 @st.cache_data(ttl=3600)
 def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.org"):
     headers = {"Authorization": f"Token {token_aap}"}
@@ -374,31 +374,41 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
 
     aap_rows = []
     for r in data:
-        # Extraer canal basándose explícitamente en la variable Kobo "Tipo / Categoria PQRS / Canal" y fallback
+        # 1. Variable exacta Kobo: "Tipo/ Categoria PQRS Canal"
         canal = (
-            r.get("Tipo / Categoria PQRS / Canal") or 
-            r.get("group_pqrs/canal") or 
+            r.get("Tipo/ Categoria PQRS Canal") or 
+            r.get("Tipo/ Categoria PQRS / Canal") or 
+            r.get("Tipo / Categoria PQRS / Canal") or
             r.get("canal") or 
             r.get("canal_recepcion") or 
-            r.get("medio") or 
             "Sin especificar"
         )
+        
+        # 2. Variable exacta Kobo: "Tipo / Categoria PQRS / Tipo de retroalimentación"
         tipo_pqrs = (
-            r.get("Tipo / Categoria PQRS / Tipo") or
+            r.get("Tipo / Categoria PQRS / Tipo de retroalimentación") or
+            r.get("Tipo/ Categoria PQRS / Tipo de retroalimentación") or
             r.get("tipo") or 
             r.get("tipo_pqrs") or 
-            r.get("clasificacion") or 
-            r.get("group_pqrs/tipo") or 
             "Información"
         )
+        
+        # 3. Variable exacta Kobo: "Estatus del PQRS / Estatus de caso"
         estado_caso = (
+            r.get("Estatus del PQRS / Estatus de caso") or
+            r.get("Estatus del PQRS/ Estatus de caso") or
             r.get("estado") or 
             r.get("estado_caso") or 
-            r.get("seguimiento") or 
-            r.get("group_pqrs/estado") or 
             "Recibido"
         )
-        fecha_aap = r.get("fecha") or r.get("fecha_recepcion") or r.get("_submission_time")
+        
+        # 4. Variable exacta Kobo: Fecha
+        fecha_aap = (
+            r.get("fecha") or 
+            r.get("Fecha") or 
+            r.get("fecha_recepcion") or 
+            r.get("_submission_time")
+        )
         
         socio_val = str(r.get("ong") or r.get("socio") or r.get("group_pqrs/socio") or "COOPI").upper().strip()
 
@@ -991,7 +1001,7 @@ if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
 if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
     df_aap_filtered = df_aap_filtered[df_aap_filtered["Estado_Geo"] == estado_sel]
 
-# MÉTIRCAS AAP EXPANDIDAS
+# MÉTRICAS AAP EXPANDIDAS
 total_pqrs = len(df_aap_filtered)
 disc_pqrs = int(df_aap_filtered["Discapacidad"].sum()) if "Discapacidad" in df_aap_filtered.columns else 0
 ninas_pqrs = int(df_aap_filtered["Es_Nina"].sum()) if "Es_Nina" in df_aap_filtered.columns else 0
@@ -1001,7 +1011,7 @@ lgbtiq_pqrs = int(df_aap_filtered["LGBTIQ"].sum()) if "LGBTIQ" in df_aap_filtere
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Fila de 6 Tarjetas Métricas
+# Tarjetas Métricas
 m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
 m_col1.metric("Total PQRS", f"{total_pqrs:,}")
 m_col2.metric("Discapacidad", f"{disc_pqrs:,}")
@@ -1012,7 +1022,7 @@ m_col6.metric("LGBTIQ+", f"{lgbtiq_pqrs:,}")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Fila 2: Gráficos principales
+# Gráficos principales AAP (Utilizando diversidad de paleta institucional)
 aap_c1, aap_c2 = st.columns(2)
 
 with aap_c1:
@@ -1028,7 +1038,7 @@ with aap_c1:
             x="Cantidad",
             orientation="h",
             text="Cantidad",
-            color_discrete_sequence=[COLOR_ROSADO_AAP]
+            color_discrete_sequence=[COLOR_AGUAMARINA]
         )
         fig_canal.update_traces(textposition="outside")
         fig_canal.update_layout(
@@ -1052,7 +1062,7 @@ with aap_c2:
             names="Tipo",
             values="Cantidad",
             hole=0.4,
-            color_discrete_sequence=[COLOR_ROSADO_AAP, '#17C3B2', '#08327D', '#F3A738', '#0072CE']
+            color_discrete_sequence=PALETA_INTEGRAS
         )
         fig_tipo.update_traces(textinfo="label+value+percent")
         fig_tipo.update_layout(
@@ -1066,7 +1076,7 @@ with aap_c2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Fila 3: Atendidos por mes y Seguimiento a casos
+# Atendidos por mes y Seguimiento a casos AAP
 aap_c3, aap_c4 = st.columns(2)
 
 with aap_c3:
@@ -1079,7 +1089,7 @@ with aap_c3:
             x="Mes_Reporte",
             y="Atendidos",
             text="Atendidos",
-            color_discrete_sequence=[COLOR_ROSADO_AAP]
+            color_discrete_sequence=['#08327D']
         )
         fig_mes_aap.update_traces(textposition="top center")
         fig_mes_aap.update_layout(
