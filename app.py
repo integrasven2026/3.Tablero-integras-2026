@@ -819,8 +819,8 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
                 df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
             )
         ]
-        alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
-        pct = (alcanzado_unicos / meta_socio * 100) if meta_socio > 0 else 0.0
+        alcanzado_val = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
+        pct = (alcanzado_val / meta_socio * 100) if meta_socio > 0 else 0.0
 
         filas_reporte.append({
             "Sector": sec,
@@ -828,18 +828,16 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
             "Socio": socio_reporte,
             "Meta Proyecto": meta_proy,
             "Meta Socio": meta_socio,
-            "Alcanzado (Únicos)": alcanzado_unicos,
+            "Alcanzados": alcanzado_val,
             "% Avance Socio": round(pct, 1)
         })
     else:
-        # Al filtrar por TODOS: Se agrupa por actividad consolidada,
-        # asignando como Meta Socio la Meta Proyecto completa.
         df_act = df_filtered[
             df_filtered["Actividad"].str.contains(act_nombre, regex=False, case=False, na=False) |
             df_filtered["Sector"].str.contains(sec, regex=False, case=False, na=False)
         ]
-        alcanzado_unicos = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
-        pct = (alcanzado_unicos / meta_proy * 100) if meta_proy > 0 else 0.0
+        alcanzado_val = df_act["ID_Unico"].nunique() if "ID_Unico" in df_act.columns else len(df_act)
+        pct = (alcanzado_val / meta_proy * 100) if meta_proy > 0 else 0.0
 
         filas_reporte.append({
             "Sector": sec,
@@ -847,7 +845,7 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
             "Socio": "TODOS (Consorcio)",
             "Meta Proyecto": meta_proy,
             "Meta Socio": meta_proy,
-            "Alcanzado (Únicos)": alcanzado_unicos,
+            "Alcanzados": alcanzado_val,
             "% Avance Socio": round(pct, 1)
         })
 
@@ -858,7 +856,7 @@ if not df_reporte_act.empty:
         df_reporte_act.style.format({
             "Meta Proyecto": "{:,}",
             "Meta Socio": "{:,}",
-            "Alcanzado (Únicos)": "{:,}",
+            "Alcanzados": "{:,}",
             "% Avance Socio": "{:.1f}%"
         }),
         width="stretch",
