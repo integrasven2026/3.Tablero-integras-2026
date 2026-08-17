@@ -6,12 +6,14 @@ from streamlit_folium import st_folium
 import folium
 import os
 import io
+import re
 
 # -----------------------------------------------------------------------------
 # PALETA DE COLORES OFICIAL CONSORCIO INTEGRAS
 # -----------------------------------------------------------------------------
 COLOR_AGUAMARINA = '#17C3B2'  # Verde / Azul Agua Marina oficial
 COLOR_ROSADO_AAP = '#D89FE3'   # Morado / Rosado Orquídea para Reporte AAP
+COLOR_VERDE_ABIERTO = '#28A745' # Verde para Casos Abiertos / En Proceso
 
 PALETA_INTEGRAS = [
     COLOR_AGUAMARINA,  # Turquesa / Agua Marina
@@ -106,8 +108,10 @@ with col_header_logo:
 
 st.markdown("---")
 
-# META TOTAL DEL PROYECTO
+# METAS DEL PROYECTO
 META_PARTICIPANTES_UNICOS = 46122
+META_BENEFICIARIOS_PROYECTO = 32000
+META_PQRS_AAP = META_BENEFICIARIOS_PROYECTO * 0.10  # 10% = 3,200 PQRS
 
 MESES_ES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
@@ -225,6 +229,14 @@ def extraer_campo_dinamico(row_dict, palabras_clave, valor_defecto="Sin especifi
             return str(value).strip()
     return valor_defecto
 
+def limpiar_texto_categoria(texto):
+    """Elimina números, códigos o guiones bajos sobrantes de las categorías."""
+    if not texto:
+        return "Sin Especificar"
+    texto_limpio = re.sub(r'[\d_]+', ' ', str(texto)).strip()
+    texto_limpio = re.sub(r'\s+', ' ', texto_limpio)
+    return texto_limpio.title() if texto_limpio else "Sin Especificar"
+
 def extraer_estatus_caso_especifico(row_dict):
     prioridades = [
         "Estatus del PQRS / Estatus de caso",
@@ -249,6 +261,17 @@ def extraer_estatus_caso_especifico(row_dict):
             return str(value).strip()
             
     return "Recibido"
+
+def extraer_fecha_aap(row_dict):
+    """Busca exhaustivamente en las claves de fecha para evitar duplicación de un solo día."""
+    claves_fecha = ["fecha", "fecha_recepcion", "fecha_pqrs", "today", "date", "_submission_time"]
+    for cf in claves_fecha:
+        for key, value in row_dict.items():
+            if value and cf in str(key).lower():
+                v_str = str(value).strip()
+                if len(v_str) >= 8:
+                    return v_str
+    return None
 
 # -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL Y AAP)
@@ -407,9 +430,9 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
     aap_rows = []
     for r in data:
         canal = extraer_campo_dinamico(r, ["canal"], "Buzón")
-        tipo_pqrs = extraer_campo_dinamico(r, ["tipo", "retroalimentacion"], "Información")
+        tipo_pqrs_raw = extraer_campo_dinamico(r, ["tipo", "retroalimentacion"], "Información")
         estado_caso = extraer_estatus_caso_especifico(r)
-        fecha_aap = extraer_campo_dinamico(r, ["fecha", "_submission_time"], None)
+        fecha_aap = extraer_fecha_aap(r)
 
         socio_val = str(r.get("ong") or r.get("socio") or r.get("group_pqrs/socio") or "COOPI").upper().strip()
 
@@ -430,9 +453,9 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
 
         aap_rows.append({
             "_id": r.get("_id"),
-            "Canal": str(canal).replace("_", " ").title(),
-            "Tipo_PQRS": str(tipo_pqrs).replace("_", " ").title(),
-            "Estado_Caso": str(estado_caso).replace("_", " ").title(),
+            "Canal": limpiar_texto_categoria(canal),
+            "Tipo_PQRS": limpiar_texto_categoria(tipo_pqrs_raw),
+            "Estado_Caso": limpiar_texto_categoria(estado_caso),
             "Fecha": fecha_aap,
             "Discapacidad": discapacidad,
             "Indigena": indigena,
@@ -447,6 +470,7 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
     
     if not df_aap.empty and "Fecha" in df_aap.columns:
         df_aap["Fecha_DT"] = pd.to_datetime(df_aap["Fecha"], errors='coerce')
+        df_aap = df_aap.sort_values(by="Fecha_DT")
         df_aap["Mes_Reporte"] = df_aap["Fecha_DT"].apply(
             lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else "Sin Fecha"
         )
@@ -983,10 +1007,11 @@ st.markdown("---")
 st.markdown("<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>", unsafe_allow_html=True)
 st.caption("Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio Integras")
 
-# FILTRO PROPIO POR SOCIO PARA AAP
 lista_socios_aap = ["TODOS"] + sorted(list(set(df_aap_raw["Socio"].unique()).union({"COOPI", "HIAS", "FLM", "PALUZ", "PLAFAM"})))
 
-col_f_aap1, col_f_aap2 = st.columns([1, 3])
+# ENCABEZADO AAP CON SELECTOR Y MÉTRICA DE META EN ESQUINA SUPERIOR DERECHA
+col_f_aap1, col_f_aap2 = st.columns([2, 1])
+
 with col_f_aap1:
     socio_aap_sel = st.selectbox("Filtrar Reporte AAP por Socio:", options=lista_socios_aap, index=0)
 
@@ -1003,8 +1028,17 @@ if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
 if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
     df_aap_filtered = df_aap_filtered[df_aap_filtered["Estado_Geo"] == estado_sel]
 
-# MÉTRICAS AAP EXPANDIDAS
+# MÉTRICAS AAP Y META
 total_pqrs = len(df_aap_filtered)
+pct_meta_pqrs = (total_pqrs / META_PQRS_AAP) * 100
+
+with col_f_aap2:
+    st.metric(
+        label="% Meta PQRS (10% de 32 mil pers.)",
+        value=f"{pct_meta_pqrs:.2f}%",
+        delta=f"{total_pqrs:,} / {int(META_PQRS_AAP):,} Meta"
+    )
+
 disc_pqrs = int(df_aap_filtered["Discapacidad"].sum()) if "Discapacidad" in df_aap_filtered.columns else 0
 ninas_pqrs = int(df_aap_filtered["Es_Nina"].sum()) if "Es_Nina" in df_aap_filtered.columns else 0
 ninos_pqrs = int(df_aap_filtered["Es_Nino"].sum()) if "Es_Nino" in df_aap_filtered.columns else 0
@@ -1034,7 +1068,6 @@ with aap_c1:
         df_canal.columns = ["Canal", "Cantidad"]
         df_canal = df_canal.sort_values(by="Cantidad", ascending=True)
         
-        # Etiqueta combinada: Valor Absoluto + Porcentaje
         df_canal["Porcentaje"] = (df_canal["Cantidad"] / total_pqrs) * 100
         df_canal["Etiqueta"] = df_canal.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
         
@@ -1088,7 +1121,7 @@ aap_c3, aap_c4 = st.columns(2)
 with aap_c3:
     st.markdown("### Participantes Atendidos por Mes")
     if total_pqrs > 0 and "Mes_Reporte" in df_aap_filtered.columns:
-        df_mes_aap = df_aap_filtered.groupby("Mes_Reporte").size().reset_index(name="Atendidos")
+        df_mes_aap = df_aap_filtered.groupby("Mes_Reporte", sort=False).size().reset_index(name="Atendidos")
         df_mes_aap["Porcentaje"] = (df_mes_aap["Atendidos"] / total_pqrs) * 100
         df_mes_aap["Etiqueta"] = df_mes_aap.apply(lambda r: f"{r['Atendidos']} ({r['Porcentaje']:.1f}%)", axis=1)
         
@@ -1118,17 +1151,29 @@ with aap_c4:
         df_est_aap["Porcentaje"] = (df_est_aap["Cantidad"] / total_pqrs) * 100
         df_est_aap["Etiqueta"] = df_est_aap.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
         
+        # Mapeo de color: Verde para Casos Abiertos / En Proceso / Pendientes
+        MAPA_COLORES_ESTADO = {
+            "Abierto": COLOR_VERDE_ABIERTO,
+            "En Proceso": COLOR_VERDE_ABIERTO,
+            "Pendiente": COLOR_VERDE_ABIERTO,
+            "Recibido": '#F3A738',
+            "Cerrado": '#08327D',
+            "Atendido": COLOR_AGUAMARINA
+        }
+        
         fig_est_aap = px.bar(
             df_est_aap,
             x="Estado",
             y="Cantidad",
             text="Etiqueta",
-            color_discrete_sequence=['#F3A738']
+            color="Estado",
+            color_discrete_map=MAPA_COLORES_ESTADO
         )
         fig_est_aap.update_traces(textposition="outside")
         fig_est_aap.update_layout(
             xaxis_title="Estado de Resolución",
             yaxis_title="Casos",
+            showlegend=False,
             font=font_layout,
             height=320
         )
