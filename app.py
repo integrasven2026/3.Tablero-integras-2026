@@ -694,7 +694,6 @@ socios_disponibles = sorted(
     )
 )
 
-# FILTROS DE ACTIVIDADES: SOCIO, SECTOR Y LOCALIDAD
 col_act1, col_act2, col_act3 = st.columns(3)
 
 with col_act1:
@@ -723,7 +722,6 @@ with col_act3:
         key="act_localidad_sel"
     )
 
-# Filtrar DataFrame base de actividades
 df_act_base = df_filtered.copy()
 if localidad_reporte != "TODOS":
     df_act_base = df_act_base[df_act_base["Estado"] == localidad_reporte]
@@ -794,7 +792,6 @@ if not df_reporte_act.empty:
         hide_index=True
     )
 
-    # BOTÓN DE DESCARGA EN EXCEL DE LA TABLA DE ACTIVIDADES
     buffer_act = io.BytesIO()
     with pd.ExcelWriter(buffer_act, engine='openpyxl') as writer:
         df_reporte_act.to_excel(writer, index=False, sheet_name='Actividades')
@@ -809,29 +806,31 @@ if not df_reporte_act.empty:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # GRÁFICO DE BARRAS (VALOR ABSOLUTO Y PORCENTAJE)
+    # GRÁFICO DE BARRAS HORIZONTAL (ACTIVIDADES EN EJE Y VERTICAL)
     fig_act_bars = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig_act_bars.add_trace(
         go.Bar(
-            x=df_reporte_act["Actividad"],
-            y=df_reporte_act["Alcanzados"],
+            y=df_reporte_act["Actividad"],
+            x=df_reporte_act["Alcanzados"],
             name="Alcanzados (Valor Absoluto)",
             text=df_reporte_act["Alcanzados"],
             textposition="auto",
-            marker_color=COLOR_AGUAMARINA
+            orientation="h",
+            marker_color='#08327D'  # Azul Marino
         ),
         secondary_y=False
     )
 
     fig_act_bars.add_trace(
         go.Bar(
-            x=df_reporte_act["Actividad"],
-            y=df_reporte_act["% Avance Socio"],
+            y=df_reporte_act["Actividad"],
+            x=df_reporte_act["% Avance Socio"],
             name="% Avance Socio",
             text=df_reporte_act["% Avance Socio"].apply(lambda x: f"{x:.1f}%"),
             textposition="auto",
-            marker_color='#F3A738'
+            orientation="h",
+            marker_color=COLOR_ROSADO_AAP  # Rosado/Morado AAP
         ),
         secondary_y=True
     )
@@ -839,14 +838,14 @@ if not df_reporte_act.empty:
     fig_act_bars.update_layout(
         title="Resultados por Actividad (Valor Absoluto y Porcentaje de Avance)",
         barmode="group",
-        xaxis_title="Actividad",
+        yaxis_title="Actividad",
         font=font_layout,
-        height=450,
+        height=550,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    fig_act_bars.update_yaxes(title_text="Alcanzados (Servicios / Personas)", secondary_y=False)
-    fig_act_bars.update_yaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
+    fig_act_bars.update_xaxes(title_text="Alcanzados (Servicios / Personas)", secondary_y=False)
+    fig_act_bars.update_xaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
 
     st.plotly_chart(fig_act_bars, width="stretch")
 else:
