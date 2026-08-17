@@ -806,15 +806,16 @@ if not df_reporte_act.empty:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # GRÁFICO DE BARRAS HORIZONTAL (ACTIVIDADES EN EJE Y VERTICAL)
+    # GRÁFICO DE BARRAS HORIZONTAL: META (AZUL) Y % AVANCE + ALCANZADOS (MORADO)
     fig_act_bars = make_subplots(specs=[[{"secondary_y": True}]])
 
+    # 1. Meta (Barra Azul Marino - Eje Primario)
     fig_act_bars.add_trace(
         go.Bar(
             y=df_reporte_act["Actividad"],
-            x=df_reporte_act["Alcanzados"],
-            name="Alcanzados (Valor Absoluto)",
-            text=df_reporte_act["Alcanzados"],
+            x=df_reporte_act["Meta Socio"],
+            name="Meta de la Actividad",
+            text=df_reporte_act["Meta Socio"],
             textposition="auto",
             orientation="h",
             marker_color='#08327D'  # Azul Marino
@@ -822,21 +823,26 @@ if not df_reporte_act.empty:
         secondary_y=False
     )
 
+    # 2. % Avance y Valor Absoluto Alcanzado (Barra Morado/Rosado AAP - Eje Secundario)
+    etiquetas_moradas = df_reporte_act.apply(
+        lambda r: f"{r['% Avance Socio']:.1f}% ({r['Alcanzados']:,})", axis=1
+    )
+
     fig_act_bars.add_trace(
         go.Bar(
             y=df_reporte_act["Actividad"],
             x=df_reporte_act["% Avance Socio"],
-            name="% Avance Socio",
-            text=df_reporte_act["% Avance Socio"].apply(lambda x: f"{x:.1f}%"),
+            name="% Avance y Alcanzados",
+            text=etiquetas_moradas,
             textposition="auto",
             orientation="h",
-            marker_color=COLOR_ROSADO_AAP  # Rosado/Morado AAP
+            marker_color=COLOR_ROSADO_AAP  # Morado / Rosado AAP (#D89FE3)
         ),
         secondary_y=True
     )
 
     fig_act_bars.update_layout(
-        title="Resultados por Actividad (Valor Absoluto y Porcentaje de Avance)",
+        title="Resultados por Actividad (Meta en Azul | Alcanzados y % Avance en Morado)",
         barmode="group",
         yaxis_title="Actividad",
         font=font_layout,
@@ -844,7 +850,7 @@ if not df_reporte_act.empty:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    fig_act_bars.update_xaxes(title_text="Alcanzados (Servicios / Personas)")
+    fig_act_bars.update_xaxes(title_text="Meta (Servicios / Personas)")
     fig_act_bars.update_yaxes(title_text="Actividad", secondary_y=False)
     fig_act_bars.update_yaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
 
