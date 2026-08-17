@@ -230,7 +230,6 @@ def extraer_campo_dinamico(row_dict, palabras_clave, valor_defecto="Sin especifi
     return valor_defecto
 
 def limpiar_texto_categoria(texto):
-    """Elimina números, códigos o guiones bajos sobrantes de las categorías."""
     if not texto:
         return "Sin Especificar"
     texto_limpio = re.sub(r'[\d_]+', ' ', str(texto)).strip()
@@ -263,7 +262,6 @@ def extraer_estatus_caso_especifico(row_dict):
     return "Recibido"
 
 def extraer_fecha_aap(row_dict):
-    """Busca exhaustivamente en las claves de fecha para evitar duplicación de un solo día."""
     claves_fecha = ["fecha", "fecha_recepcion", "fecha_pqrs", "today", "date", "_submission_time"]
     for cf in claves_fecha:
         for key, value in row_dict.items():
@@ -439,6 +437,7 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
         discapacidad = extraer_valor_booleano(r, ["discapacidad", "discapaz", "pcd"])
         indigena = extraer_valor_booleano(r, ["indigena", "poblacion_indigena", "etnia"])
         lgbtiq = extraer_valor_booleano(r, ["lgbtiq", "lgbt", "poblacion_lgbtiq"])
+        embarazada = extraer_valor_booleano(r, ["embarazada", "lactante", "embarazada_o_lactante"])
         
         sexo_raw = str(r.get("sexo") or r.get("group_pqrs/sexo") or "").lower().strip()
         try:
@@ -460,6 +459,7 @@ def cargar_datos_aap(asset_id_aap, token_aap, kobo_url="https://eu.kobotoolbox.o
             "Discapacidad": discapacidad,
             "Indigena": indigena,
             "LGBTIQ": lgbtiq,
+            "Embarazada": embarazada,
             "Es_Nina": es_nina,
             "Es_Nino": es_nino,
             "Socio": socio_val,
@@ -1008,20 +1008,38 @@ st.markdown("<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</
 st.caption("Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio Integras")
 
 lista_socios_aap = ["TODOS"] + sorted(list(set(df_aap_raw["Socio"].unique()).union({"COOPI", "HIAS", "FLM", "PALUZ", "PLAFAM"})))
+lista_poblacion_interes = ["TODOS", "Discapacidad", "Niñas", "Niños", "Comunidad Indígena", "LGBTIQ+", "Embarazadas / Lactantes"]
 
-# ENCABEZADO AAP CON SELECTOR Y MÉTRICA DE META EN ESQUINA SUPERIOR DERECHA
-col_f_aap1, col_f_aap2 = st.columns([2, 1])
+# ENCABEZADO AAP CON SELECTORES Y MÉTRICA DE META
+col_f_aap1, col_f_aap2, col_f_aap3 = st.columns([1.5, 1.5, 1])
 
 with col_f_aap1:
     socio_aap_sel = st.selectbox("Filtrar Reporte AAP por Socio:", options=lista_socios_aap, index=0)
 
+with col_f_aap2:
+    poblacion_sel = st.selectbox("Población de Interés:", options=lista_poblacion_interes, index=0)
+
 df_aap_filtered = df_aap_raw.copy()
 
-# Aplicación de Filtros al reporte AAP
+# Filtro Socio AAP
 if socio_aap_sel != "TODOS":
     df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_aap_sel]
 elif socio_sel != "Todos":
     df_aap_filtered = df_aap_filtered[df_aap_filtered["Socio"] == socio_sel]
+
+# Filtro Población de Interés AAP
+if poblacion_sel == "Discapacidad":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Discapacidad"] == 1]
+elif poblacion_sel == "Niñas":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Es_Nina"] == 1]
+elif poblacion_sel == "Niños":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Es_Nino"] == 1]
+elif poblacion_sel == "Comunidad Indígena":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Indigena"] == 1]
+elif poblacion_sel == "LGBTIQ+":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["LGBTIQ"] == 1]
+elif poblacion_sel == "Embarazadas / Lactantes":
+    df_aap_filtered = df_aap_filtered[df_aap_filtered["Embarazada"] == 1]
 
 if mes_sel != "Todos" and "Mes_Reporte" in df_aap_filtered.columns:
     df_aap_filtered = df_aap_filtered[df_aap_filtered["Mes_Reporte"] == mes_sel]
@@ -1032,7 +1050,7 @@ if estado_sel != "Todos" and "Estado_Geo" in df_aap_filtered.columns:
 total_pqrs = len(df_aap_filtered)
 pct_meta_pqrs = (total_pqrs / META_PQRS_AAP) * 100
 
-with col_f_aap2:
+with col_f_aap3:
     st.metric(
         label="% Meta PQRS (10% de 32 mil pers.)",
         value=f"{pct_meta_pqrs:.2f}%",
@@ -1044,17 +1062,19 @@ ninas_pqrs = int(df_aap_filtered["Es_Nina"].sum()) if "Es_Nina" in df_aap_filter
 ninos_pqrs = int(df_aap_filtered["Es_Nino"].sum()) if "Es_Nino" in df_aap_filtered.columns else 0
 indig_pqrs = int(df_aap_filtered["Indigena"].sum()) if "Indigena" in df_aap_filtered.columns else 0
 lgbtiq_pqrs = int(df_aap_filtered["LGBTIQ"].sum()) if "LGBTIQ" in df_aap_filtered.columns else 0
+emb_pqrs = int(df_aap_filtered["Embarazada"].sum()) if "Embarazada" in df_aap_filtered.columns else 0
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Tarjetas Métricas
-m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
+# Tarjetas Métricas Expandidas (7 Tarjetas)
+m_col1, m_col2, m_col3, m_col4, m_col5, m_col6, m_col7 = st.columns(7)
 m_col1.metric("Total PQRS", f"{total_pqrs:,}")
 m_col2.metric("Discapacidad", f"{disc_pqrs:,}")
 m_col3.metric("Niñas", f"{ninas_pqrs:,}")
 m_col4.metric("Niños", f"{ninos_pqrs:,}")
 m_col5.metric("Com. Indígena", f"{indig_pqrs:,}")
 m_col6.metric("LGBTIQ+", f"{lgbtiq_pqrs:,}")
+m_col7.metric("Embarazadas", f"{emb_pqrs:,}")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1151,7 +1171,6 @@ with aap_c4:
         df_est_aap["Porcentaje"] = (df_est_aap["Cantidad"] / total_pqrs) * 100
         df_est_aap["Etiqueta"] = df_est_aap.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']:.1f}%)", axis=1)
         
-        # Mapeo de color: Verde para Casos Abiertos / En Proceso / Pendientes
         MAPA_COLORES_ESTADO = {
             "Abierto": COLOR_VERDE_ABIERTO,
             "En Proceso": COLOR_VERDE_ABIERTO,
