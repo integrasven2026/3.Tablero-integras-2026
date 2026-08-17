@@ -842,7 +842,7 @@ if not df_reporte_act.empty:
     )
 
     fig_act_bars.update_layout(
-        title="Resultados por Actividad (Meta en Azul | Alcanzados y % Avance en Morado)",
+        title="Resultados por Actividad",
         barmode="group",
         yaxis_title="Actividad",
         font=font_layout,
@@ -852,7 +852,8 @@ if not df_reporte_act.empty:
 
     fig_act_bars.update_xaxes(title_text="Meta (Servicios / Personas)")
     fig_act_bars.update_yaxes(title_text="Actividad", secondary_y=False)
-    fig_act_bars.update_yaxes(title_text="% Avance", secondary_y=True, showgrid=False, ticksuffix="%")
+    # Ocultar etiquetas duplicadas del eje Y secundario a la derecha
+    fig_act_bars.update_yaxes(title=None, showticklabels=False, secondary_y=True)
 
     st.plotly_chart(fig_act_bars, width="stretch")
 else:
