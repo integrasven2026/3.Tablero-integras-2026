@@ -129,7 +129,7 @@ st.markdown('---')
 # METAS DEL PROYECTO
 META_PARTICIPANTES_UNICOS = 46122
 META_BENEFICIARIOS_PROYECTO = 32000
-META_PQRS_AAP = META_BENEFICIARIOS_PROYECTO * 0.05  # 5% = 1,600 PQRS
+META_5_PORCIENTO = META_BENEFICIARIOS_PROYECTO * 0.05  # 5% de 32,000 = 1,600 pers.
 
 MESES_ES = {
     1: 'Enero',
@@ -858,7 +858,7 @@ st.markdown('---')
 # -----------------------------------------------------------------------------
 # 6. SEGUIMIENTO DE ACTIVIDADES POR SOCIO, SECTOR Y LOCALIDAD
 # -----------------------------------------------------------------------------
-st.subheader('Seguimiento de Actividades por Socio, Sector y Localidad')
+st.subheader('Seguimiento de Actividades por Socio, Sector Y Localidad')
 
 METAS_ACTIVIDADES = {
     'General Protection Case Management': {
@@ -1409,7 +1409,7 @@ lista_socios_aap = ['TODOS'] + sorted(
 )
 lista_poblacion_interes = [
     'TODOS',
-    'Discapacidad',
+    'Personas con Discapacidad',
     'Niñas',
     'Niños',
     'Comunidad Indígena',
@@ -1436,7 +1436,7 @@ if socio_aap_sel != 'TODOS':
 elif socio_sel != 'Todos':
   df_aap_filtered = df_aap_filtered[df_aap_filtered['Socio'] == socio_sel]
 
-if poblacion_sel == 'Discapacidad':
+if poblacion_sel == 'Personas con Discapacidad':
   df_aap_filtered = df_aap_filtered[df_aap_filtered['Discapacidad'] == 1]
 elif poblacion_sel == 'Niñas':
   df_aap_filtered = df_aap_filtered[df_aap_filtered['Es_Nina'] == 1]
@@ -1457,13 +1457,13 @@ if estado_sel != 'Todos' and 'Estado_Geo' in df_aap_filtered.columns:
   ]
 
 total_pqrs = len(df_aap_filtered)
-pct_meta_pqrs = (total_pqrs / META_PQRS_AAP) * 100
+pct_meta_pqrs = (total_pqrs / META_5_PORCIENTO) * 100
 
 with col_f_aap3:
   st.metric(
       label='% Meta PQRS (5% de 32 mil pers.)',
       value=f'{pct_meta_pqrs:.2f}%',
-      delta=f'{total_pqrs:,} / {int(META_PQRS_AAP):,} Meta',
+      delta=f'{total_pqrs:,} / {int(META_5_PORCIENTO):,} Meta',
   )
 
 st.markdown('<br>', unsafe_allow_html=True)
@@ -1606,16 +1606,16 @@ st.markdown('---')
 # 11. SECCIÓN: INDICADORES AAP (FORMULARIO KOBO IND)
 # -----------------------------------------------------------------------------
 st.markdown(
-    f"<h2 class='titulo-indicadores-aap'>4. Indicadores AAP</h2>",
+    "<h2 class='titulo-indicadores-aap'>4. Indicadores AAP</h2>",
     unsafe_allow_html=True,
 )
 st.caption('Evaluación de Satisfacción y Conocimiento sobre Servicios AAP')
 
 if not df_eval_aap.empty:
-  # Filtros superiores de Indicadores AAP (Socio y Población de Interés)
-  col_ind_socio, col_ind_pob, col_ind_tot = st.columns([1.5, 1.5, 1])
+  # Filtros superiores + Métricas principales alineadas
+  col_ind_soc, col_ind_pob, col_ind_tot, col_ind_meta = st.columns([1.5, 1.5, 1, 1.2])
 
-  with col_ind_socio:
+  with col_ind_soc:
     socio_eval_sel = st.selectbox(
         'Filtrar Indicadores AAP por Socio:',
         options=lista_socios_aap,
@@ -1631,23 +1631,30 @@ if not df_eval_aap.empty:
         key='ind_poblacion_sel',
     )
 
-  # Filtrado dinámico de datos
   df_eval_filtered = df_eval_aap.copy()
 
+  # BÚSQUEDA DINÁMICA ROBUSTA DE COLUMNAS EN KOBO IND
   # 1. Filtro por Socio
   if socio_eval_sel != 'TODOS':
-    socio_col = [c for c in df_eval_filtered.columns if 'socio' in c.lower() or 'ong' in c.lower()]
+    socio_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['socio', 'ong', 'organizacion'])]
     if socio_col:
+      col_target = socio_col[0]
       df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[socio_col[0]].astype(str).str.upper() == socio_eval_sel
+          df_eval_filtered[col_target].astype(str).str.upper().str.strip() == socio_eval_sel.upper().strip()
+      ]
+    else:
+      # Si no hay columna de socio identificada de forma directa, intenta buscar texto coincidente
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered.astype(str).apply(lambda row: socio_eval_sel.upper() in ' '.join(row).upper(), axis=1)
       ]
 
   # 2. Filtro por Población de Interés
-  if poblacion_eval_sel == 'Discapacidad':
-    disc_col = [c for c in df_eval_filtered.columns if 'discapacidad' in c.lower() or 'pcd' in c.lower()]
+  if poblacion_eval_sel == 'Personas con Discapacidad':
+    disc_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['discapacidad', 'pcd', 'discapaz'])]
     if disc_col:
+      col_d = disc_col[0]
       df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[disc_col[0]].apply(lambda x: extraer_valor_booleano({disc_col[0]: x}, [disc_col[0]])) == 1
+          df_eval_filtered[col_d].apply(lambda x: extraer_valor_booleano({col_d: x}, [col_d])) == 1
       ]
   elif poblacion_eval_sel == 'Niñas':
     df_eval_filtered = df_eval_filtered[
@@ -1658,38 +1665,50 @@ if not df_eval_aap.empty:
         df_eval_filtered.astype(str).apply(lambda r: 'niño' in ' '.join(r).lower(), axis=1)
     ]
   elif poblacion_eval_sel == 'Comunidad Indígena':
-    ind_col = [c for c in df_eval_filtered.columns if 'indigena' in c.lower() or 'etnia' in c.lower()]
+    ind_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['indigena', 'etnia'])]
     if ind_col:
+      col_i = ind_col[0]
       df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[ind_col[0]].apply(lambda x: extraer_valor_booleano({ind_col[0]: x}, [ind_col[0]])) == 1
+          df_eval_filtered[col_i].apply(lambda x: extraer_valor_booleano({col_i: x}, [col_i])) == 1
       ]
   elif poblacion_eval_sel == 'LGBTIQ+':
-    lgb_col = [c for c in df_eval_filtered.columns if 'lgbt' in c.lower()]
+    lgb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['lgbt', 'lgbtiq'])]
     if lgb_col:
+      col_l = lgb_col[0]
       df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[lgb_col[0]].apply(lambda x: extraer_valor_booleano({lgb_col[0]: x}, [lgb_col[0]])) == 1
+          df_eval_filtered[col_l].apply(lambda x: extraer_valor_booleano({col_l: x}, [col_l])) == 1
       ]
   elif poblacion_eval_sel == 'Embarazadas / Lactantes':
-    emb_col = [c for c in df_eval_filtered.columns if 'embarazada' in c.lower() or 'lactante' in c.lower()]
+    emb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['embarazada', 'lactante'])]
     if emb_col:
+      col_e = emb_col[0]
       df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[emb_col[0]].apply(lambda x: extraer_valor_booleano({emb_col[0]: x}, [emb_col[0]])) == 1
+          df_eval_filtered[col_e].apply(lambda x: extraer_valor_booleano({col_e: x}, [col_e])) == 1
       ]
 
-  # Métrica de Total Participantes al lado de los filtros
+  tot_part_eval = len(df_eval_filtered)
+  pct_meta_eval = (tot_part_eval / META_5_PORCIENTO) * 100
+
   with col_ind_tot:
-    tot_part_eval = len(df_eval_filtered)
     st.metric('Total Participantes', f'{tot_part_eval:,}')
+
+  with col_ind_meta:
+    st.metric(
+        label='% Meta (5% de 32 mil pers.)',
+        value=f'{pct_meta_eval:.2f}%',
+        delta=f'{tot_part_eval:,} / {int(META_5_PORCIENTO):,} Meta',
+    )
 
   st.markdown('<br>', unsafe_allow_html=True)
 
-  # GRÁFICOS EN CUADRÍCULA 2x2
+  # GRÁFICOS 2x2
   row1_c1, row1_c2 = st.columns(2)
 
   # 1. SATISFACCIÓN DE LOS PARTICIPANTES
   with row1_c1:
     st.markdown('### Satisfacción de los participantes')
     sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
+    
     if sat_col and not df_eval_filtered.empty:
       df_sat = df_eval_filtered[sat_col[0]].value_counts().reset_index()
       df_sat.columns = ['Nivel', 'Cantidad']
@@ -1697,7 +1716,7 @@ if not df_eval_aap.empty:
     else:
       df_sat = pd.DataFrame({'Nivel': [], 'Cantidad': []})
 
-    if not df_sat.empty:
+    if not df_sat.empty and df_sat['Cantidad'].sum() > 0:
       fig_sat = px.pie(
           df_sat,
           names='Nivel',
@@ -1725,6 +1744,7 @@ if not df_eval_aap.empty:
   with row1_c2:
     st.markdown('### Conocimiento del comportamiento esperado')
     comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
+    
     if comp_col and not df_eval_filtered.empty:
       df_comp = df_eval_filtered[comp_col[0]].value_counts().reset_index()
       df_comp.columns = ['Respuesta', 'Cantidad']
@@ -1732,7 +1752,7 @@ if not df_eval_aap.empty:
     else:
       df_comp = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
-    if not df_comp.empty:
+    if not df_comp.empty and df_comp['Cantidad'].sum() > 0:
       total_comp = df_comp['Cantidad'].sum()
       df_comp['Etiqueta'] = df_comp['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_comp * 100):.1f}%)" if total_comp > 0 else f"{x}"
@@ -1769,6 +1789,7 @@ if not df_eval_aap.empty:
   with row2_c1:
     st.markdown('### Conocimiento del Consorcio y Servicios')
     cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
+    
     if cons_col and not df_eval_filtered.empty:
       df_cons = df_eval_filtered[cons_col[0]].value_counts().reset_index()
       df_cons.columns = ['Respuesta', 'Cantidad']
@@ -1776,7 +1797,7 @@ if not df_eval_aap.empty:
     else:
       df_cons = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
-    if not df_cons.empty:
+    if not df_cons.empty and df_cons['Cantidad'].sum() > 0:
       total_cons = df_cons['Cantidad'].sum()
       df_cons['Etiqueta'] = df_cons['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_cons * 100):.1f}%)" if total_cons > 0 else f"{x}"
@@ -1812,6 +1833,7 @@ if not df_eval_aap.empty:
   with row2_c2:
     st.markdown('### Conocimientos de los canales de retroalimentación')
     ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
+    
     if ret_col and not df_eval_filtered.empty:
       df_ret = df_eval_filtered[ret_col[0]].value_counts().reset_index()
       df_ret.columns = ['Respuesta', 'Cantidad']
@@ -1819,7 +1841,7 @@ if not df_eval_aap.empty:
     else:
       df_ret = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
-    if not df_ret.empty:
+    if not df_ret.empty and df_ret['Cantidad'].sum() > 0:
       total_ret = df_ret['Cantidad'].sum()
       df_ret['Etiqueta'] = df_ret['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_ret * 100):.1f}%)" if total_ret > 0 else f"{x}"
