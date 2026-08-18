@@ -1612,37 +1612,92 @@ st.markdown(
 st.caption('Evaluación de Satisfacción y Conocimiento sobre Servicios AAP')
 
 if not df_eval_aap.empty:
-  # Filtrado de datos por socio
+  # Filtros superiores de Indicadores AAP (Socio y Población de Interés)
+  col_ind_socio, col_ind_pob, col_ind_tot = st.columns([1.5, 1.5, 1])
+
+  with col_ind_socio:
+    socio_eval_sel = st.selectbox(
+        'Filtrar Indicadores AAP por Socio:',
+        options=lista_socios_aap,
+        index=0,
+        key='ind_socio_sel',
+    )
+
+  with col_ind_pob:
+    poblacion_eval_sel = st.selectbox(
+        'Población de Interés (Indicadores):',
+        options=lista_poblacion_interes,
+        index=0,
+        key='ind_poblacion_sel',
+    )
+
+  # Filtrado dinámico de datos
   df_eval_filtered = df_eval_aap.copy()
-  if socio_sel != 'Todos':
+
+  # 1. Filtro por Socio
+  if socio_eval_sel != 'TODOS':
     socio_col = [c for c in df_eval_filtered.columns if 'socio' in c.lower() or 'ong' in c.lower()]
     if socio_col:
-      df_eval_filtered = df_eval_filtered[df_eval_filtered[socio_col[0]].astype(str).str.upper() == socio_sel]
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered[socio_col[0]].astype(str).str.upper() == socio_eval_sel
+      ]
 
-  col_ind_m1, col_ind_m2 = st.columns([1, 4])
+  # 2. Filtro por Población de Interés
+  if poblacion_eval_sel == 'Discapacidad':
+    disc_col = [c for c in df_eval_filtered.columns if 'discapacidad' in c.lower() or 'pcd' in c.lower()]
+    if disc_col:
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered[disc_col[0]].apply(lambda x: extraer_valor_booleano({disc_col[0]: x}, [disc_col[0]])) == 1
+      ]
+  elif poblacion_eval_sel == 'Niñas':
+    df_eval_filtered = df_eval_filtered[
+        df_eval_filtered.astype(str).apply(lambda r: 'niña' in ' '.join(r).lower(), axis=1)
+    ]
+  elif poblacion_eval_sel == 'Niños':
+    df_eval_filtered = df_eval_filtered[
+        df_eval_filtered.astype(str).apply(lambda r: 'niño' in ' '.join(r).lower(), axis=1)
+    ]
+  elif poblacion_eval_sel == 'Comunidad Indígena':
+    ind_col = [c for c in df_eval_filtered.columns if 'indigena' in c.lower() or 'etnia' in c.lower()]
+    if ind_col:
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered[ind_col[0]].apply(lambda x: extraer_valor_booleano({ind_col[0]: x}, [ind_col[0]])) == 1
+      ]
+  elif poblacion_eval_sel == 'LGBTIQ+':
+    lgb_col = [c for c in df_eval_filtered.columns if 'lgbt' in c.lower()]
+    if lgb_col:
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered[lgb_col[0]].apply(lambda x: extraer_valor_booleano({lgb_col[0]: x}, [lgb_col[0]])) == 1
+      ]
+  elif poblacion_eval_sel == 'Embarazadas / Lactantes':
+    emb_col = [c for c in df_eval_filtered.columns if 'embarazada' in c.lower() or 'lactante' in c.lower()]
+    if emb_col:
+      df_eval_filtered = df_eval_filtered[
+          df_eval_filtered[emb_col[0]].apply(lambda x: extraer_valor_booleano({emb_col[0]: x}, [emb_col[0]])) == 1
+      ]
 
-  with col_ind_m1:
+  # Métrica de Total Participantes al lado de los filtros
+  with col_ind_tot:
     tot_part_eval = len(df_eval_filtered)
     st.metric('Total Participantes', f'{tot_part_eval:,}')
 
-  with col_ind_m2:
-    row1_c1, row1_c2 = st.columns(2)
+  st.markdown('<br>', unsafe_allow_html=True)
 
-    # 1. SATISFACCIÓN DE LOS PARTICIPANTES (GRÁFICO CIRCULAR AMPLIA VISTA Y LIMPIEZA DE ETIQUETAS)
-    with row1_c1:
-      st.markdown('### Satisfacción de los participantes')
-      sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
-      if sat_col:
-        df_sat = df_eval_filtered[sat_col[0]].value_counts().reset_index()
-        df_sat.columns = ['Nivel', 'Cantidad']
-        # Elimina códigos prefijo como '1__', '2__'
-        df_sat['Nivel'] = df_sat['Nivel'].apply(limpiar_texto_categoria)
-      else:
-        df_sat = pd.DataFrame({
-            'Nivel': ['Muy Satisfecho', 'Satisfecho'],
-            'Cantidad': [32, 10]
-        })
+  # GRÁFICOS EN CUADRÍCULA 2x2
+  row1_c1, row1_c2 = st.columns(2)
 
+  # 1. SATISFACCIÓN DE LOS PARTICIPANTES
+  with row1_c1:
+    st.markdown('### Satisfacción de los participantes')
+    sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
+    if sat_col and not df_eval_filtered.empty:
+      df_sat = df_eval_filtered[sat_col[0]].value_counts().reset_index()
+      df_sat.columns = ['Nivel', 'Cantidad']
+      df_sat['Nivel'] = df_sat['Nivel'].apply(limpiar_texto_categoria)
+    else:
+      df_sat = pd.DataFrame({'Nivel': [], 'Cantidad': []})
+
+    if not df_sat.empty:
       fig_sat = px.pie(
           df_sat,
           names='Nivel',
@@ -1663,21 +1718,21 @@ if not df_eval_aap.empty:
           margin=dict(l=20, r=20, t=20, b=20),
       )
       st.plotly_chart(fig_sat, width='stretch')
+    else:
+      st.info('No hay registros de satisfacción para los filtros seleccionados.')
 
-    # 2. CONOCIMIENTO DEL COMPORTAMIENTO ESPERADO (BARRAS VERTICALES)
-    with row1_c2:
-      st.markdown('### Conocimiento del comportamiento esperado')
-      comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
-      if comp_col:
-        df_comp = df_eval_filtered[comp_col[0]].value_counts().reset_index()
-        df_comp.columns = ['Respuesta', 'Cantidad']
-        df_comp['Respuesta'] = df_comp['Respuesta'].apply(limpiar_texto_categoria)
-      else:
-        df_comp = pd.DataFrame({
-            'Respuesta': ['Sí', 'No'],
-            'Cantidad': [23, 19]
-        })
+  # 2. CONOCIMIENTO DEL COMPORTAMIENTO ESPERADO
+  with row1_c2:
+    st.markdown('### Conocimiento del comportamiento esperado')
+    comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
+    if comp_col and not df_eval_filtered.empty:
+      df_comp = df_eval_filtered[comp_col[0]].value_counts().reset_index()
+      df_comp.columns = ['Respuesta', 'Cantidad']
+      df_comp['Respuesta'] = df_comp['Respuesta'].apply(limpiar_texto_categoria)
+    else:
+      df_comp = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
+    if not df_comp.empty:
       total_comp = df_comp['Cantidad'].sum()
       df_comp['Etiqueta'] = df_comp['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_comp * 100):.1f}%)" if total_comp > 0 else f"{x}"
@@ -1705,23 +1760,23 @@ if not df_eval_aap.empty:
           margin=dict(l=20, r=20, t=20, b=20),
       )
       st.plotly_chart(fig_comp, width='stretch')
+    else:
+      st.info('No hay registros de comportamiento para los filtros seleccionados.')
 
-    row2_c1, row2_c2 = st.columns(2)
+  row2_c1, row2_c2 = st.columns(2)
 
-    # 3. CONOCIMIENTO DEL CONSORCIO Y SERVICIOS (BARRAS HORIZONTALES)
-    with row2_c1:
-      st.markdown('### Conocimiento del Consorcio y Servicios')
-      cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
-      if cons_col:
-        df_cons = df_eval_filtered[cons_col[0]].value_counts().reset_index()
-        df_cons.columns = ['Respuesta', 'Cantidad']
-        df_cons['Respuesta'] = df_cons['Respuesta'].apply(limpiar_texto_categoria)
-      else:
-        df_cons = pd.DataFrame({
-            'Respuesta': ['Sí', 'No'],
-            'Cantidad': [29, 13]
-        })
+  # 3. CONOCIMIENTO DEL CONSORCIO Y SERVICIOS
+  with row2_c1:
+    st.markdown('### Conocimiento del Consorcio y Servicios')
+    cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
+    if cons_col and not df_eval_filtered.empty:
+      df_cons = df_eval_filtered[cons_col[0]].value_counts().reset_index()
+      df_cons.columns = ['Respuesta', 'Cantidad']
+      df_cons['Respuesta'] = df_cons['Respuesta'].apply(limpiar_texto_categoria)
+    else:
+      df_cons = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
+    if not df_cons.empty:
       total_cons = df_cons['Cantidad'].sum()
       df_cons['Etiqueta'] = df_cons['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_cons * 100):.1f}%)" if total_cons > 0 else f"{x}"
@@ -1750,21 +1805,21 @@ if not df_eval_aap.empty:
           margin=dict(l=20, r=20, t=20, b=20),
       )
       st.plotly_chart(fig_cons, width='stretch')
+    else:
+      st.info('No hay registros sobre el consorcio para los filtros seleccionados.')
 
-    # 4. CONOCIMIENTOS DE LOS CANALES DE RETROALIMENTACIÓN (BARRAS VERTICALES)
-    with row2_c2:
-      st.markdown('### Conocimientos de los canales de retroalimentación')
-      ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
-      if ret_col:
-        df_ret = df_eval_filtered[ret_col[0]].value_counts().reset_index()
-        df_ret.columns = ['Respuesta', 'Cantidad']
-        df_ret['Respuesta'] = df_ret['Respuesta'].apply(limpiar_texto_categoria)
-      else:
-        df_ret = pd.DataFrame({
-            'Respuesta': ['No', 'Sí'],
-            'Cantidad': [28, 14]
-        })
+  # 4. CONOCIMIENTOS DE LOS CANALES DE RETROALIMENTACIÓN
+  with row2_c2:
+    st.markdown('### Conocimientos de los canales de retroalimentación')
+    ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
+    if ret_col and not df_eval_filtered.empty:
+      df_ret = df_eval_filtered[ret_col[0]].value_counts().reset_index()
+      df_ret.columns = ['Respuesta', 'Cantidad']
+      df_ret['Respuesta'] = df_ret['Respuesta'].apply(limpiar_texto_categoria)
+    else:
+      df_ret = pd.DataFrame({'Respuesta': [], 'Cantidad': []})
 
+    if not df_ret.empty:
       total_ret = df_ret['Cantidad'].sum()
       df_ret['Etiqueta'] = df_ret['Cantidad'].apply(
           lambda x: f"{x} ({(x / total_ret * 100):.1f}%)" if total_ret > 0 else f"{x}"
@@ -1792,5 +1847,7 @@ if not df_eval_aap.empty:
           margin=dict(l=20, r=20, t=20, b=20),
       )
       st.plotly_chart(fig_ret, width='stretch')
+    else:
+      st.info('No hay registros de conocimiento de canales para los filtros seleccionados.')
 else:
   st.info('Conexión establecida con KoboToolbox. Esperando registros del formulario de Indicadores AAP.')
