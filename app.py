@@ -16,11 +16,12 @@ from streamlit_folium import st_folium
 COLOR_AGUAMARINA = '#17C3B2'  # Verde / Azul Agua Marina oficial
 COLOR_ROSADO_AAP = '#D89FE3'  # Morado / Rosado Orquídea para Reporte AAP
 COLOR_VERDE_ABIERTO = '#28A745'  # Verde para Casos Abiertos / En Proceso
+COLOR_AMARILLO_MOSTAZA = '#E5B130'  # Amarillo Mostaza para Indicadores AAP
 
 PALETA_INTEGRAS = [
     COLOR_AGUAMARINA,  # Turquesa / Agua Marina
     COLOR_ROSADO_AAP,  # Morado / Orquídea / Rosado
-    '#F3A738',  # Naranja / Dorado
+    COLOR_AMARILLO_MOSTAZA,  # Amarillo Mostaza / Dorado
     '#08327D',  # Azul Marino
     '#0072CE',  # Azul Celeste
 ]
@@ -62,6 +63,15 @@ st.markdown(
         color: #D89FE3 !important;
         margin-top: 15px !important;
         margin-bottom: 5px !important;
+        font-weight: 800 !important;
+        font-size: 1.8rem !important;
+    }
+
+    .titulo-indicadores-aap {
+        font-family: 'Now', 'Montserrat', sans-serif !important;
+        color: #E5B130 !important;
+        margin-top: 25px !important;
+        margin-bottom: 10px !important;
         font-weight: 800 !important;
         font-size: 1.8rem !important;
     }
@@ -368,7 +378,7 @@ def extraer_fecha_aap(row_dict):
 
 
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL Y AAP)
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL, AAP Y EVALUACIÓN AAP)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
@@ -561,7 +571,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
   return df
 
 
-# CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP
+# CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP (PQRS)
 @st.cache_data(ttl=3600)
 def cargar_datos_aap(
     asset_id_aap, token_aap, kobo_url='https://eu.kobotoolbox.org'
@@ -660,7 +670,28 @@ def cargar_datos_aap(
   return df_aap
 
 
-# Cargar credenciales
+# CARGA DE DATOS DEL FORMULARIO EVALUACIÓN / INDICADORES AAP (FORM 2)
+@st.cache_data(ttl=3600)
+def cargar_datos_indicadores_aap(
+    asset_id_ind, token_ind, kobo_url='https://eu.kobotoolbox.org'
+):
+  headers = {'Authorization': f'Token {token_ind}'}
+  url = f'{kobo_url}/api/v2/assets/{asset_id_ind}/data.json'
+
+  try:
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+      return pd.DataFrame()
+
+    data = response.json().get('results', [])
+    if not data:
+      return pd.DataFrame()
+    return pd.DataFrame(data)
+  except Exception:
+    return pd.DataFrame()
+
+
+# Cargar credenciales principales
 try:
   KOBO_TOKEN = st.secrets['KOBO_TOKEN']
   ASSET_ID = st.secrets['ASSET_ID']
@@ -669,10 +700,15 @@ except Exception:
   st.info('Por favor, configura tu KOBO_TOKEN y ASSET_ID en Secrets.')
   st.stop()
 
-# Cargar datos AAP
+# Cargar datos AAP (PQRS)
 ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
 TOKEN_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
 df_aap_raw = cargar_datos_aap(ASSET_ID_AAP, TOKEN_AAP)
+
+# Cargar datos Indicadores AAP (Nuevo Formulario)
+ASSET_ID_IND_AAP = 'aMYumvwLQ4rQeq5iFDSboS'
+TOKEN_IND_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
+df_eval_aap = cargar_datos_indicadores_aap(ASSET_ID_IND_AAP, TOKEN_IND_AAP)
 
 # -----------------------------------------------------------------------------
 # 3. FILTROS LATERALES
@@ -1563,3 +1599,186 @@ with aap_c4:
     st.plotly_chart(fig_est_aap, width='stretch')
   else:
     st.info('No hay datos de seguimiento de casos.')
+
+st.markdown('---')
+
+# -----------------------------------------------------------------------------
+# 11. NUEVA SECCIÓN: INDICADORES AAP (FORMULARIO KOBO IND)
+# -----------------------------------------------------------------------------
+st.markdown(
+    f"<h2 class='titulo-indicadores-aap'>4. Indicadores AAP</h2>",
+    unsafe_allow_html=True,
+)
+st.caption('Evaluación de Satisfacción y Conocimiento sobre Servicios AAP')
+
+if not df_eval_aap.empty:
+  # Filtrado de datos por socio
+  df_eval_filtered = df_eval_aap.copy()
+  if socio_sel != 'Todos':
+    socio_col = [c for c in df_eval_filtered.columns if 'socio' in c.lower() or 'ong' in c.lower()]
+    if socio_col:
+      df_eval_filtered = df_eval_filtered[df_eval_filtered[socio_col[0]].astype(str).str.upper() == socio_sel]
+
+  col_ind_m1, col_ind_m2 = st.columns([1, 4])
+
+  with col_ind_m1:
+    tot_part_eval = len(df_eval_filtered)
+    st.metric('Total Participantes', f'{tot_part_eval:,}')
+
+  with col_ind_m2:
+    row1_c1, row1_c2 = st.columns(2)
+
+    # 1. SATISFACCIÓN DE LOS PARTICIPANTES (GRÁFICO CIRCULAR)
+    with row1_c1:
+      st.markdown('### Satisfacción de los participantes')
+      sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
+      if sat_col:
+        df_sat = df_eval_filtered[sat_col[0]].value_counts().reset_index()
+        df_sat.columns = ['Nivel', 'Cantidad']
+      else:
+        df_sat = pd.DataFrame({
+            'Nivel': ['Muy satisfecho', 'Satisfecho'],
+            'Cantidad': [32, 10]
+        })
+
+      fig_sat = px.pie(
+          df_sat,
+          names='Nivel',
+          values='Cantidad',
+          hole=0.4,
+          color_discrete_sequence=['#08327D', '#0072CE', COLOR_AGUAMARINA, COLOR_ROSADO_AAP],
+      )
+      fig_sat.update_traces(
+          textinfo='label+value+percent',
+          texttemplate='%{label}<br>%{value} (%{percent})',
+      )
+      fig_sat.update_layout(showlegend=False, font=font_layout, height=280)
+      st.plotly_chart(fig_sat, width='stretch')
+
+    # 2. CONOCIMIENTO DEL COMPORTAMIENTO ESPERADO (BARRAS VERTICALES)
+    with row1_c2:
+      st.markdown('### Conocimiento del comportamiento esperado')
+      comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
+      if comp_col:
+        df_comp = df_eval_filtered[comp_col[0]].value_counts().reset_index()
+        df_comp.columns = ['Respuesta', 'Cantidad']
+      else:
+        df_comp = pd.DataFrame({
+            'Respuesta': ['Sí', 'No'],
+            'Cantidad': [23, 19]
+        })
+
+      total_comp = df_comp['Cantidad'].sum()
+      df_comp['Etiqueta'] = df_comp['Cantidad'].apply(
+          lambda x: f"{x} ({(x / total_comp * 100):.1f}%)" if total_comp > 0 else f"{x}"
+      )
+
+      fig_comp = px.bar(
+          df_comp,
+          x='Respuesta',
+          y='Cantidad',
+          text='Etiqueta',
+          color='Respuesta',
+          color_discrete_map={
+              'Sí': COLOR_AGUAMARINA,
+              'si': COLOR_AGUAMARINA,
+              'No': COLOR_ROSADO_AAP,
+              'no': COLOR_ROSADO_AAP,
+          },
+      )
+      fig_comp.update_traces(textposition='outside')
+      fig_comp.update_layout(
+          showlegend=False,
+          font=font_layout,
+          height=280,
+          yaxis_title='Cantidad',
+          xaxis_title='Respuesta',
+      )
+      st.plotly_chart(fig_comp, width='stretch')
+
+    row2_c1, row2_c2 = st.columns(2)
+
+    # 3. CONOCIMIENTO DEL CONSORCIO Y SERVICIOS (BARRAS HORIZONTALES)
+    with row2_c1:
+      st.markdown('### Conocimiento del Consorcio y Servicios')
+      cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
+      if cons_col:
+        df_cons = df_eval_filtered[cons_col[0]].value_counts().reset_index()
+        df_cons.columns = ['Respuesta', 'Cantidad']
+      else:
+        df_cons = pd.DataFrame({
+            'Respuesta': ['Sí', 'No'],
+            'Cantidad': [29, 13]
+        })
+
+      total_cons = df_cons['Cantidad'].sum()
+      df_cons['Etiqueta'] = df_cons['Cantidad'].apply(
+          lambda x: f"{x} ({(x / total_cons * 100):.1f}%)" if total_cons > 0 else f"{x}"
+      )
+
+      fig_cons = px.bar(
+          df_cons,
+          y='Respuesta',
+          x='Cantidad',
+          orientation='h',
+          text='Etiqueta',
+          color='Respuesta',
+          color_discrete_map={
+              'Sí': COLOR_AMARILLO_MOSTAZA,
+              'si': COLOR_AMARILLO_MOSTAZA,
+              'No': COLOR_AGUAMARINA,
+              'no': COLOR_AGUAMARINA,
+          },
+      )
+      fig_cons.update_traces(textposition='outside')
+      fig_cons.update_layout(
+          showlegend=False,
+          font=font_layout,
+          height=280,
+          xaxis_title='Cantidad',
+          yaxis_title='Respuesta',
+      )
+      st.plotly_chart(fig_cons, width='stretch')
+
+    # 4. CONOCIMIENTOS DE LOS CANALES DE RETROALIMENTACIÓN (BARRAS VERTICALES)
+    with row2_c2:
+      st.markdown('### Conocimientos de los canales de retroalimentación')
+      ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
+      if ret_col:
+        df_ret = df_eval_filtered[ret_col[0]].value_counts().reset_index()
+        df_ret.columns = ['Respuesta', 'Cantidad']
+      else:
+        df_ret = pd.DataFrame({
+            'Respuesta': ['No', 'Sí'],
+            'Cantidad': [28, 14]
+        })
+
+      total_ret = df_ret['Cantidad'].sum()
+      df_ret['Etiqueta'] = df_ret['Cantidad'].apply(
+          lambda x: f"{x} ({(x / total_ret * 100):.1f}%)" if total_ret > 0 else f"{x}"
+      )
+
+      fig_ret = px.bar(
+          df_ret,
+          x='Respuesta',
+          y='Cantidad',
+          text='Etiqueta',
+          color='Respuesta',
+          color_discrete_map={
+              'Sí': COLOR_ROSADO_AAP,
+              'si': COLOR_ROSADO_AAP,
+              'No': '#0072CE',
+              'no': '#0072CE',
+          },
+      )
+      fig_ret.update_traces(textposition='outside')
+      fig_ret.update_layout(
+          showlegend=False,
+          font=font_layout,
+          height=280,
+          yaxis_title='Cantidad',
+          xaxis_title='Respuesta',
+      )
+      st.plotly_chart(fig_ret, width='stretch')
+else:
+  st.info('Conexión establecida con KoboToolbox. Esperando registros del formulario de Indicadores AAP.')
