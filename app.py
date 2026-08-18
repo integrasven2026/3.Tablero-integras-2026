@@ -1630,6 +1630,7 @@ if not df_eval_aap.empty:
 
   df_eval_filtered = df_eval_aap.copy()
 
+  # 1. FILTRADO POR SOCIO (BÚSQUEDA ROBUSTA)
   if socio_eval_sel != 'TODOS':
     socio_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['socio', 'ong', 'organizacion'])]
     if socio_col:
@@ -1641,41 +1642,52 @@ if not df_eval_aap.empty:
       mask = df_eval_filtered.astype(str).apply(lambda col: col.str.upper().str.contains(socio_eval_sel.upper(), na=False, regex=False)).any(axis=1)
       df_eval_filtered = df_eval_filtered[mask]
 
+  # 2. FILTRADO ROBUSTO POR POBLACIÓN DE INTERÉS
   if poblacion_eval_sel == 'Personas con Discapacidad':
     disc_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['discapacidad', 'pcd', 'discapaz'])]
     if disc_col:
-      col_d = disc_col[0]
-      df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[col_d].apply(lambda x: extraer_valor_booleano({col_d: x}, [col_d])) == 1
-      ]
+      mask_disc = df_eval_filtered[disc_col[0]].astype(str).str.lower().isin(['1', 'si', 'sí', 'true', 'discapacidad'])
+      df_eval_filtered = df_eval_filtered[mask_disc]
+    else:
+      mask_disc = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('discapac', na=False, regex=False)).any(axis=1)
+      df_eval_filtered = df_eval_filtered[mask_disc]
+
   elif poblacion_eval_sel == 'Niñas':
     mask_nina = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('niña', na=False, regex=False)).any(axis=1)
     df_eval_filtered = df_eval_filtered[mask_nina]
+
   elif poblacion_eval_sel == 'Niños':
     mask_nino = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('niño', na=False, regex=False)).any(axis=1)
     df_eval_filtered = df_eval_filtered[mask_nino]
+
   elif poblacion_eval_sel == 'Comunidad Indígena':
     ind_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['indigena', 'etnia'])]
     if ind_col:
-      col_i = ind_col[0]
-      df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[col_i].apply(lambda x: extraer_valor_booleano({col_i: x}, [col_i])) == 1
-      ]
-  elif poblacion_eval_sel == 'LGBTIQ+':
-    lgb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['lgbt', 'lgbtiq'])]
-    if lgb_col:
-      col_l = lgb_col[0]
-      df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[col_l].apply(lambda x: extraer_valor_booleano({col_l: x}, [col_l])) == 1
-      ]
-  elif poblacion_eval_sel == 'Embarazadas / Lactantes':
-    emb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['embarazada', 'lactante'])]
-    if emb_col:
-      col_e = emb_col[0]
-      df_eval_filtered = df_eval_filtered[
-          df_eval_filtered[col_e].apply(lambda x: extraer_valor_booleano({col_e: x}, [col_e])) == 1
-      ]
+      mask_ind = df_eval_filtered[ind_col[0]].astype(str).str.lower().isin(['1', 'si', 'sí', 'true', 'indigena'])
+      df_eval_filtered = df_eval_filtered[mask_ind]
+    else:
+      mask_ind = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('indigena', na=False, regex=False)).any(axis=1)
+      df_eval_filtered = df_eval_filtered[mask_ind]
 
+  elif poblacion_eval_sel == 'LGBTIQ+':
+    lgb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['lgbt', 'lgbtiq', 'diversidad'])]
+    if lgb_col:
+      mask_lgb = df_eval_filtered[lgb_col[0]].astype(str).str.lower().isin(['1', 'si', 'sí', 'true', 'lgbt', 'lgbtiq'])
+      df_eval_filtered = df_eval_filtered[mask_lgb]
+    else:
+      mask_lgb = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('lgbt', na=False, regex=False)).any(axis=1)
+      df_eval_filtered = df_eval_filtered[mask_lgb]
+
+  elif poblacion_eval_sel == 'Embarazadas / Lactantes':
+    emb_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['embaraz', 'lactan'])]
+    if emb_col:
+      mask_emb = df_eval_filtered[emb_col[0]].astype(str).str.lower().isin(['1', 'si', 'sí', 'true', 'embarazada', 'lactante'])
+      df_eval_filtered = df_eval_filtered[mask_emb]
+    else:
+      mask_emb = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('embaraz|lactan', na=False, regex=True)).any(axis=1)
+      df_eval_filtered = df_eval_filtered[mask_emb]
+
+  # MÉTRICAS Y META DEL 5% DE 32,000 (1,600 PERSONAS)
   tot_part_eval = len(df_eval_filtered)
   pct_meta_eval = (tot_part_eval / META_5_PORCIENTO) * 100
 
@@ -1691,8 +1703,10 @@ if not df_eval_aap.empty:
 
   st.markdown('<br>', unsafe_allow_html=True)
 
+  # GRÁFICOS 2x2
   row1_c1, row1_c2 = st.columns(2)
 
+  # 1. SATISFACCIÓN DE LOS PARTICIPANTES
   with row1_c1:
     st.markdown('### Satisfacción de los participantes')
     sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
@@ -1728,6 +1742,7 @@ if not df_eval_aap.empty:
     else:
       st.info('No hay registros de satisfacción para los filtros seleccionados.')
 
+  # 2. CONOCIMIENTO DEL COMPORTAMIENTO ESPERADO
   with row1_c2:
     st.markdown('### Conocimiento del comportamiento esperado')
     comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
@@ -1772,6 +1787,7 @@ if not df_eval_aap.empty:
 
   row2_c1, row2_c2 = st.columns(2)
 
+  # 3. CONOCIMIENTO DEL CONSORCIO Y SERVICIOS
   with row2_c1:
     st.markdown('### Conocimiento del Consorcio y Servicios')
     cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
@@ -1815,6 +1831,7 @@ if not df_eval_aap.empty:
     else:
       st.info('No hay registros sobre el consorcio para los filtros seleccionados.')
 
+  # 4. CONOCIMIENTOS DE LOS CANALES DE RETROALIMENTACIÓN
   with row2_c2:
     st.markdown('### Conocimientos de los canales de retroalimentación')
     ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
