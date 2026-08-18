@@ -129,7 +129,7 @@ st.markdown('---')
 # METAS DEL PROYECTO
 META_PARTICIPANTES_UNICOS = 46122
 META_BENEFICIARIOS_PROYECTO = 32000
-META_PQRS_AAP = META_BENEFICIARIOS_PROYECTO * 0.10  # 10% = 3,200 PQRS
+META_PQRS_AAP = META_BENEFICIARIOS_PROYECTO * 0.05  # 5% = 1,600 PQRS
 
 MESES_ES = {
     1: 'Enero',
@@ -1461,7 +1461,7 @@ pct_meta_pqrs = (total_pqrs / META_PQRS_AAP) * 100
 
 with col_f_aap3:
   st.metric(
-      label='% Meta PQRS (10% de 32 mil pers.)',
+      label='% Meta PQRS (5% de 32 mil pers.)',
       value=f'{pct_meta_pqrs:.2f}%',
       delta=f'{total_pqrs:,} / {int(META_PQRS_AAP):,} Meta',
   )
