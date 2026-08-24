@@ -19,9 +19,9 @@ COLOR_VERDE_ABIERTO = '#28A745'  # Verde para Casos Abiertos / En Proceso
 COLOR_AMARILLO_MOSTAZA = '#E5B130'  # Amarillo Mostaza para Indicadores AAP
 
 PALETA_INTEGRAS = [
-    COLOR_AGUAMARINA,  # Turquesa / Agua Marina
-    COLOR_ROSADO_AAP,  # Morado / Orquídea / Rosado
-    COLOR_AMARILLO_MOSTAZA,  # Amarillo Mostaza / Dorado
+    COLOR_AGUAMARINA,
+    COLOR_ROSADO_AAP,
+    COLOR_AMARILLO_MOSTAZA,
     '#08327D',  # Azul Marino
     '#0072CE',  # Azul Celeste
 ]
@@ -116,12 +116,12 @@ with col_header_logo:
 
   if logo_path:
     try:
-      st.image(logo_path, width='stretch')
+      st.image(logo_path, use_container_width=True)
     except TypeError:
-      st.image(logo_path, width='stretch')
+      st.image(logo_path, use_container_width=True)
   else:
     try:
-      st.image(URL_LOGO_GITHUB, width='stretch')
+      st.image(URL_LOGO_GITHUB, use_container_width=True)
     except Exception:
       st.warning("⚠️ No se pudo cargar el logo 'integras.jpg'.")
 
@@ -379,7 +379,7 @@ def extraer_fecha_aap(row_dict):
 
 
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (FORMULARIO PRINCIPAL, AAP Y EVALUACIÓN AAP)
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (API CONTINGENCIA)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
@@ -572,6 +572,69 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
   return df
 
 
+# -----------------------------------------------------------------------------
+# CARGA DE DATOS LOCAL (BBDD ESTANDARIZADA) CON CONTINGENCIA A KOBO
+# -----------------------------------------------------------------------------
+@st.cache_data(ttl=3600)
+def cargar_datos_principales():
+  ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
+
+  # 1. Intenta cargar primero la BBDD Excel Estandarizada
+  if os.path.exists(ruta_excel_local):
+    try:
+      df = pd.read_excel(ruta_excel_local)
+
+      # Asegurar tipos de datos para los cálculos del tablero
+      if 'Fecha' in df.columns:
+        df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
+        df['Mes_Reporte'] = df['Fecha_DT'].apply(
+            lambda x: (
+                f"{x.year} - {MESES_ES.get(x.month, '')}"
+                if pd.notnull(x)
+                else 'Sin Fecha'
+            )
+        )
+
+      # Asegurar columna de ID Único para contar participantes
+      if 'ID_Unico' not in df.columns:
+        if 'CodigoID' in df.columns and df['CodigoID'].notna().any():
+          df['ID_Unico'] = df['CodigoID']
+        elif 'Documento' in df.columns and df['Documento'].notna().any():
+          df['ID_Unico'] = 'DOC_' + df['Documento'].astype(str)
+        else:
+          df['ID_Unico'] = df.index.astype(str)
+
+      # Mapear rango etario si la edad existe
+      if 'Grupo_Demografico' not in df.columns and 'Edad' in df.columns:
+        df['Grupo_Demografico'] = df.apply(
+            lambda r: (
+                ('Niña' if r['Sexo'] == 'Mujer' else 'Niño')
+                if r['Edad'] < 18
+                else ('Mujer' if r['Sexo'] == 'Mujer' else 'Hombre')
+            ),
+            axis=1,
+        )
+
+      # Normalización de Indicadores_Codigos si viene de Excel
+      if 'Indicadores_resultados' in df.columns:
+        df['Indicadores_Codigos'] = (
+            df['Indicadores_resultados'].astype(str).str.split()
+        )
+
+      return df
+    except Exception as e:
+      st.error(f'Error al leer {ruta_excel_local}: {e}')
+
+  # 2. Si no encuentra el Excel local, consulta la API de KoboToolbox
+  try:
+    KOBO_TOKEN = st.secrets['KOBO_TOKEN']
+    ASSET_ID = st.secrets['ASSET_ID']
+    return cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
+  except Exception:
+    st.info('Carga un archivo local o configura KOBO_TOKEN y ASSET_ID.')
+    return pd.DataFrame()
+
+
 # CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP (PQRS)
 @st.cache_data(ttl=3600)
 def cargar_datos_aap(
@@ -692,14 +755,8 @@ def cargar_datos_indicadores_aap(
     return pd.DataFrame()
 
 
-# Cargar credenciales principales
-try:
-  KOBO_TOKEN = st.secrets['KOBO_TOKEN']
-  ASSET_ID = st.secrets['ASSET_ID']
-  df_raw = cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
-except Exception:
-  st.info('Por favor, configura tu KOBO_TOKEN y ASSET_ID en Secrets.')
-  st.stop()
+# Asignación del DataFrame principal procesado (Excel Estandarizado / Kobo API)
+df_raw = cargar_datos_principales()
 
 # Cargar datos AAP (PQRS)
 ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
@@ -719,7 +776,7 @@ st.sidebar.header('Sincronización en Tiempo Real')
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
-  if st.button('🔄 Actualizar', width='stretch'):
+  if st.button('🔄 Actualizar', use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
@@ -753,13 +810,13 @@ def borrar_filtros():
 
 
 with col_btn2:
-  st.button('🧹 Limpiar Filtros', on_click=borrar_filtros, width='stretch')
+  st.button('🧹 Limpiar Filtros', on_click=borrar_filtros, use_container_width=True)
 
 st.sidebar.markdown('---')
 st.sidebar.header('Filtros de Consulta General')
 
 if df_raw.empty:
-  st.warning('No se encontraron registros en el formulario de KoboToolbox.')
+  st.warning('No se encontraron registros en el origen de datos.')
   st.stop()
 
 meses_ordenados = sorted(
@@ -1038,7 +1095,7 @@ if not df_reporte_act.empty:
           'Alcanzados': '{:,}',
           '% Avance Socio': '{:.1f}%',
       }),
-      width='stretch',
+      use_container_width=True,
       hide_index=True,
   )
 
@@ -1059,7 +1116,6 @@ if not df_reporte_act.empty:
   # GRÁFICOS DE BARRAS HORIZONTAL: META (AZUL) Y % AVANCE + ALCANZADOS (MORADO)
   fig_act_bars = make_subplots(specs=[[{'secondary_y': True}]])
 
-  # 1. Meta (Barra Azul Marino - Eje Primario)
   fig_act_bars.add_trace(
       go.Bar(
           y=df_reporte_act['Actividad'],
@@ -1068,12 +1124,11 @@ if not df_reporte_act.empty:
           text=df_reporte_act['Meta Socio'],
           textposition='auto',
           orientation='h',
-          marker_color='#08327D',  # Azul Marino
+          marker_color='#08327D',
       ),
       secondary_y=False,
   )
 
-  # 2. % Avance y Valor Absoluto Alcanzado (Barra Morado/Rosado AAP - Eje Secundario)
   etiquetas_moradas = df_reporte_act.apply(
       lambda r: f"{r['% Avance Socio']:.1f}% ({r['Alcanzados']:,})", axis=1
   )
@@ -1086,7 +1141,7 @@ if not df_reporte_act.empty:
           text=etiquetas_moradas,
           textposition='auto',
           orientation='h',
-          marker_color=COLOR_ROSADO_AAP,  # Morado / Rosado AAP (#D89FE3)
+          marker_color=COLOR_ROSADO_AAP,
       ),
       secondary_y=True,
   )
@@ -1106,7 +1161,7 @@ if not df_reporte_act.empty:
   fig_act_bars.update_yaxes(title_text='Actividad', secondary_y=False)
   fig_act_bars.update_yaxes(title=None, showticklabels=False, secondary_y=True)
 
-  st.plotly_chart(fig_act_bars, width='stretch')
+  st.plotly_chart(fig_act_bars, use_container_width=True)
 else:
   st.info(
       'No se registraron actividades correspondientes a los filtros'
@@ -1143,7 +1198,7 @@ with g1:
         font=font_layout,
         title_font=dict(family='Now, Montserrat', size=16),
     )
-    st.plotly_chart(fig_pie_demo, width='stretch')
+    st.plotly_chart(fig_pie_demo, use_container_width=True)
 
 with g2:
   st.subheader('Participantes Únicos por Sector')
@@ -1172,7 +1227,7 @@ with g2:
         font=font_layout,
         title_font=dict(family='Now, Montserrat', size=16),
     )
-    st.plotly_chart(fig_bar_sec, width='stretch')
+    st.plotly_chart(fig_bar_sec, use_container_width=True)
 
 st.markdown('---')
 
@@ -1209,7 +1264,7 @@ with m1:
     )
     fig_muni.update_traces(textposition='outside')
     fig_muni.update_layout(showlegend=False, font=font_layout)
-    st.plotly_chart(fig_muni, width='stretch')
+    st.plotly_chart(fig_muni, use_container_width=True)
 
 with m2:
   st.markdown('### Cobertura de la Intervención')
@@ -1372,7 +1427,7 @@ if total_impactados > 0:
       }
   )
 
-  st.dataframe(df_mostrar, width='stretch', hide_index=True)
+  st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
   buffer = io.BytesIO()
   with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -1503,7 +1558,7 @@ with aap_c1:
         font=font_layout,
         height=320,
     )
-    st.plotly_chart(fig_canal, width='stretch')
+    st.plotly_chart(fig_canal, use_container_width=True)
   else:
     st.info('No hay datos de canales registrados.')
 
@@ -1522,7 +1577,7 @@ with aap_c2:
     )
     fig_tipo.update_traces(textinfo='label+value+percent')
     fig_tipo.update_layout(showlegend=True, font=font_layout, height=320)
-    st.plotly_chart(fig_tipo, width='stretch')
+    st.plotly_chart(fig_tipo, use_container_width=True)
   else:
     st.info('No hay datos de tipos de PQRS.')
 
@@ -1554,7 +1609,7 @@ with aap_c3:
     fig_mes_aap.update_layout(
         xaxis_title='Mes', yaxis_title='PQRS Recibidos', font=font_layout, height=320
     )
-    st.plotly_chart(fig_mes_aap, width='stretch')
+    st.plotly_chart(fig_mes_aap, use_container_width=True)
   else:
     st.info('No hay datos de temporalidad.')
 
@@ -1595,7 +1650,7 @@ with aap_c4:
         font=font_layout,
         height=320,
     )
-    st.plotly_chart(fig_est_aap, width='stretch')
+    st.plotly_chart(fig_est_aap, use_container_width=True)
   else:
     st.info('No hay datos de seguimiento de casos.')
 
@@ -1631,7 +1686,6 @@ if not df_eval_aap.empty:
 
   df_eval_filtered = df_eval_aap.copy()
 
-  # 1. FILTRADO POR SOCIO (BÚSQUEDA ROBUSTA)
   if socio_eval_sel != 'TODOS':
     socio_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['socio', 'ong', 'organizacion'])]
     if socio_col:
@@ -1643,7 +1697,6 @@ if not df_eval_aap.empty:
       mask = df_eval_filtered.astype(str).apply(lambda col: col.str.upper().str.contains(socio_eval_sel.upper(), na=False, regex=False)).any(axis=1)
       df_eval_filtered = df_eval_filtered[mask]
 
-  # 2. FILTRADO ROBUSTO POR POBLACIÓN DE INTERÉS
   if poblacion_eval_sel == 'Personas con Discapacidad':
     disc_col = [c for c in df_eval_filtered.columns if any(p in c.lower() for p in ['discapacidad', 'pcd', 'discapaz'])]
     if disc_col:
@@ -1688,7 +1741,6 @@ if not df_eval_aap.empty:
       mask_emb = df_eval_filtered.astype(str).apply(lambda col: col.str.lower().str.contains('embaraz|lactan', na=False, regex=True)).any(axis=1)
       df_eval_filtered = df_eval_filtered[mask_emb]
 
-  # MÉTRICAS Y META DEL 5% DE 32,000 (1,600 PERSONAS)
   tot_part_eval = len(df_eval_filtered)
   pct_meta_eval = (tot_part_eval / META_5_PORCIENTO) * 100
 
@@ -1704,10 +1756,8 @@ if not df_eval_aap.empty:
 
   st.markdown('<br>', unsafe_allow_html=True)
 
-  # GRÁFICOS 2x2
   row1_c1, row1_c2 = st.columns(2)
 
-  # 1. SATISFACCIÓN DE LOS PARTICIPANTES
   with row1_c1:
     st.markdown('### Satisfacción de los participantes')
     sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
@@ -1739,11 +1789,10 @@ if not df_eval_aap.empty:
           height=360,
           margin=dict(l=20, r=20, t=20, b=20),
       )
-      st.plotly_chart(fig_sat, width='stretch')
+      st.plotly_chart(fig_sat, use_container_width=True)
     else:
       st.info('No hay registros de satisfacción para los filtros seleccionados.')
 
-  # 2. CONOCIMIENTO DEL COMPORTAMIENTO ESPERADO
   with row1_c2:
     st.markdown('### Conocimiento del comportamiento esperado')
     comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
@@ -1782,13 +1831,12 @@ if not df_eval_aap.empty:
           xaxis_title='Respuesta',
           margin=dict(l=20, r=20, t=20, b=20),
       )
-      st.plotly_chart(fig_comp, width='stretch')
+      st.plotly_chart(fig_comp, use_container_width=True)
     else:
       st.info('No hay registros de comportamiento para los filtros seleccionados.')
 
   row2_c1, row2_c2 = st.columns(2)
 
-  # 3. CONOCIMIENTO DEL CONSORCIO Y SERVICIOS
   with row2_c1:
     st.markdown('### Conocimiento del Consorcio y Servicios')
     cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
@@ -1828,11 +1876,10 @@ if not df_eval_aap.empty:
           yaxis_title='Respuesta',
           margin=dict(l=20, r=20, t=20, b=20),
       )
-      st.plotly_chart(fig_cons, width='stretch')
+      st.plotly_chart(fig_cons, use_container_width=True)
     else:
       st.info('No hay registros sobre el consorcio para los filtros seleccionados.')
 
-  # 4. CONOCIMIENTOS DE LOS CANALES DE RETROALIMENTACIÓN
   with row2_c2:
     st.markdown('### Conocimientos de los canales de retroalimentación')
     ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
@@ -1871,7 +1918,7 @@ if not df_eval_aap.empty:
           xaxis_title='Respuesta',
           margin=dict(l=20, r=20, t=20, b=20),
       )
-      st.plotly_chart(fig_ret, width='stretch')
+      st.plotly_chart(fig_ret, use_container_width=True)
     else:
       st.info('No hay registros de conocimiento de canales para los filtros seleccionados.')
 else:
