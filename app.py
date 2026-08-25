@@ -130,7 +130,7 @@ st.markdown('---')
 # METAS DEL PROYECTO
 META_PARTICIPANTES_UNICOS = 46122
 META_BENEFICIARIOS_PROYECTO = 32000
-META_5_PORCIENTO = META_BENEFICIARIOS_PROYECTO * 0.05  # 5% de 32,000 = 1,600 pers.
+META_5_PORCIENTO = META_BENEFICIARIOS_PROYECTO * 0.05
 
 MESES_ES = {
     1: 'Enero',
@@ -289,7 +289,6 @@ METAS_INDICADORES = {
 
 font_layout = dict(family='Quicksand', size=13)
 
-
 # -----------------------------------------------------------------------------
 # FUNCIONES AUXILIARES DE EXTRACCIÓN ROBUSTA
 # -----------------------------------------------------------------------------
@@ -303,10 +302,7 @@ def extraer_valor_booleano(diccionario_beneficiario, lista_posibles_claves):
           return 1
   return 0
 
-
-def extraer_campo_dinamico(
-    row_dict, palabras_clave, valor_defecto='Sin especificar'
-):
+def extraer_campo_dinamico(row_dict, palabras_clave, valor_defecto='Sin especificar'):
   for key, value in row_dict.items():
     if value is None or str(value).strip() == '':
       continue
@@ -315,14 +311,12 @@ def extraer_campo_dinamico(
       return str(value).strip()
   return valor_defecto
 
-
 def limpiar_texto_categoria(texto):
   if not texto:
     return 'Sin Especificar'
   texto_limpio = re.sub(r'[\d_]+', ' ', str(texto)).strip()
   texto_limpio = re.sub(r'\s+', ' ', texto_limpio)
   return texto_limpio.title() if texto_limpio else 'Sin Especificar'
-
 
 def extraer_estatus_caso_especifico(row_dict):
   prioridades = [
@@ -337,38 +331,20 @@ def extraer_estatus_caso_especifico(row_dict):
   ]
   for p in prioridades:
     for key, value in row_dict.items():
-      if (
-          value is not None
-          and str(value).strip() != ''
-          and p.lower() in str(key).lower()
-      ):
+      if value is not None and str(value).strip() != '' and p.lower() in str(key).lower():
         return str(value).strip()
 
   for key, value in row_dict.items():
     if value is None or str(value).strip() == '':
       continue
     key_lower = str(key).lower()
-    if (
-        'estatus' in key_lower
-        or 'resolucion' in key_lower
-        or 'seguimiento' in key_lower
-    ) and not (
-        'geo' in key_lower or 'loc' in key_lower or 'municipio' in key_lower
-    ):
+    if ('estatus' in key_lower or 'resolucion' in key_lower or 'seguimiento' in key_lower) and not ('geo' in key_lower or 'loc' in key_lower or 'municipio' in key_lower):
       return str(value).strip()
 
   return 'Recibido'
 
-
 def extraer_fecha_aap(row_dict):
-  claves_fecha = [
-      'fecha',
-      'fecha_recepcion',
-      'fecha_pqrs',
-      'today',
-      'date',
-      '_submission_time',
-  ]
+  claves_fecha = ['fecha', 'fecha_recepcion', 'fecha_pqrs', 'today', 'date', '_submission_time']
   for cf in claves_fecha:
     for key, value in row_dict.items():
       if value and cf in str(key).lower():
@@ -377,9 +353,8 @@ def extraer_fecha_aap(row_dict):
           return v_str
   return None
 
-
 # -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX (API CONTINGENCIA)
+# 2. CARGA DE DATOS DESDE KOBOTOOLBOX API
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
@@ -389,10 +364,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
   try:
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-      st.error(
-          'Error al conectar con KoboToolbox API (Código'
-          f' {response.status_code})'
-      )
+      st.error(f'Error al conectar con KoboToolbox API (Código {response.status_code})')
       return pd.DataFrame()
 
     data = response.json().get('results', [])
@@ -403,85 +375,39 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
     return pd.DataFrame()
 
   registros_expandidos = []
-
-  claves_discapacidad = [
-      'persona_con_discapacidad',
-      'discapacidad',
-      'count_discapacidad',
-  ]
+  claves_discapacidad = ['persona_con_discapacidad', 'discapacidad', 'count_discapacidad']
   claves_indigena = ['poblacion_indigena', 'indigena', 'count_indigena']
-  claves_embarazada = [
-      'embarazada',
-      'lactante',
-      'embarazada_o_lactante',
-      'count_embarazada',
-  ]
+  claves_embarazada = ['embarazada', 'lactante', 'embarazada_o_lactante', 'count_embarazada']
   claves_lgbtiq = ['poblacion_lgbtiq', 'lgbtiq', 'count_lgbtiq']
 
   for row in data:
-    sector_raw = str(
-        row.get('Resultado') or row.get('group_datos_act/Resultado') or ''
-    ).strip()
-    sector_map = {
-        'R1': 'Protección',
-        'R2': 'Salud',
-        'R3': 'Nutrición',
-        'R4': 'WASH',
-        'R5': 'Respuesta a Emergencia',
-    }
+    sector_raw = str(row.get('Resultado') or row.get('group_datos_act/Resultado') or '').strip()
+    sector_map = {'R1': 'Protección', 'R2': 'Salud', 'R3': 'Nutrición', 'R4': 'WASH', 'R5': 'Respuesta a Emergencia'}
     sector_label = sector_map.get(sector_raw, sector_raw)
 
-    estado_code = str(
-        row.get('Estado') or row.get('group_datos_loc/Estado') or ''
-    ).strip()
+    estado_code = str(row.get('Estado') or row.get('group_datos_loc/Estado') or '').strip()
     estado_label = MAPA_ESTADOS.get(estado_code, estado_code)
 
-    muni_code = str(
-        row.get('Municipio') or row.get('group_datos_loc/Municipio') or ''
-    ).strip()
+    muni_code = str(row.get('Municipio') or row.get('group_datos_loc/Municipio') or '').strip()
     muni_label = MAPA_MUNICIPIOS.get(muni_code, muni_code)
 
-    fecha_act = (
-        row.get('Fecha_de_la_Actividad')
-        or row.get('group_datos_act/Fecha_de_la_Actividad')
-        or row.get('_submission_time')
-    )
-
-    ind_val = (
-        row.get('Indicadores_resultados')
-        or row.get('group_datos_act/Indicadores_resultados')
-        or ''
-    )
+    fecha_act = row.get('Fecha_de_la_Actividad') or row.get('group_datos_act/Fecha_de_la_Actividad') or row.get('_submission_time')
+    ind_val = row.get('Indicadores_resultados') or row.get('group_datos_act/Indicadores_resultados') or ''
     indicadores_raw = str(ind_val).split()
-    indicadores_labels = [
-        MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind
-    ]
-
-    ong_val = str(
-        row.get('ong') or row.get('group_datos_act/ong') or 'COOPI'
-    ).upper().strip()
+    indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
+    ong_val = str(row.get('ong') or row.get('group_datos_act/ong') or 'COOPI').upper().strip()
 
     base_info = {
         '_id': row.get('_id'),
         'Fecha': fecha_act,
         'Estado': estado_label,
         'Municipio': muni_label,
-        'Comunidad': (
-            row.get('Comunidad') or row.get('group_datos_loc/Comunidad')
-        ),
+        'Comunidad': row.get('Comunidad') or row.get('group_datos_loc/Comunidad'),
         'ONG': ong_val,
         'Sector': sector_label,
-        'Actividad': str(
-            row.get('Actividad')
-            or row.get('group_datos_act/Actividad')
-            or 'General'
-        ).strip(),
+        'Actividad': str(row.get('Actividad') or row.get('group_datos_act/Actividad') or 'General').strip(),
         'Indicadores_Codigos': indicadores_raw,
-        'Indicadores_Texto': (
-            ' | '.join(indicadores_labels)
-            if indicadores_labels
-            else 'Sin indicador'
-        ),
+        'Indicadores_Texto': ' | '.join(indicadores_labels) if indicadores_labels else 'Sin indicador',
     }
 
     beneficiarios = row.get('group_beneficiario', [])
@@ -489,14 +415,10 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
       for idx_b, b in enumerate(beneficiarios):
         b_info = base_info.copy()
         cid = str(b.get('group_beneficiario/CodigoID', '')).strip()
-        doc = str(
-            b.get('group_beneficiario/N_de_Documento_de_Identidad', '')
-        ).strip()
+        doc = str(b.get('group_beneficiario/N_de_Documento_de_Identidad', '')).strip()
 
         b_info['Nombre'] = str(b.get('group_beneficiario/Nombre', '')).strip()
-        b_info['Apellido'] = str(
-            b.get('group_beneficiario/Apellido', '')
-        ).strip()
+        b_info['Apellido'] = str(b.get('group_beneficiario/Apellido', '')).strip()
         b_info['Documento'] = doc
         b_info['CodigoID'] = cid
 
@@ -508,7 +430,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
           b_info['ID_Unico'] = f"REG_{row.get('_id')}_{idx_b}"
 
         sexo_raw = str(b.get('group_beneficiario/Sexo', '')).lower().strip()
-
         if sexo_raw in ['femenino', 'f', 'mujer']:
           sexo_norm = 'Mujer'
         elif sexo_raw in ['masculino', 'm', 'hombre']:
@@ -525,22 +446,13 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
         b_info['Edad'] = edad
 
         if edad < 18:
-          b_info['Grupo_Demografico'] = (
-              'Niña' if sexo_norm == 'Mujer' else 'Niño'
-          )
+          b_info['Grupo_Demografico'] = 'Niña' if sexo_norm == 'Mujer' else 'Niño'
         else:
-          b_info['Grupo_Demografico'] = (
-              'Mujer' if sexo_norm == 'Mujer' else 'Hombre'
-          )
+          b_info['Grupo_Demografico'] = 'Mujer' if sexo_norm == 'Mujer' else 'Hombre'
 
-        b_info['Es_Discapacidad'] = extraer_valor_booleano(
-            b, claves_discapacidad
-        )
+        b_info['Es_Discapacidad'] = extraer_valor_booleano(b, claves_discapacidad)
         b_info['Es_Indigena'] = extraer_valor_booleano(b, claves_indigena)
-        b_info['Es_Embarazada_Lactante'] = extraer_valor_booleano(
-            b, claves_embarazada
-        )
-
+        b_info['Es_Embarazada_Lactante'] = extraer_valor_booleano(b, claves_embarazada)
         lgbtiq_kobo = extraer_valor_booleano(b, claves_lgbtiq)
         b_info['Es_LGBTIQ'] = 1 if (lgbtiq_kobo == 1 or sexo_norm == 'Otro') else 0
 
@@ -560,42 +472,29 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
   if not df.empty and 'Fecha' in df.columns:
     df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
     df['Mes_Reporte'] = df['Fecha_DT'].apply(
-        lambda x: (
-            f"{x.year} - {MESES_ES.get(x.month, '')}"
-            if pd.notnull(x)
-            else 'Sin Fecha'
-        )
+        lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
     )
   else:
     df['Mes_Reporte'] = 'Sin Fecha'
 
   return df
 
-
 # -----------------------------------------------------------------------------
-# CARGA DE DATOS LOCAL (BBDD ESTANDARIZADA) CON CONTINGENCIA A KOBO
+# CARGA DE DATOS DESDE EXCEL LOCAL
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def cargar_datos_principales():
+def cargar_datos_excel_local():
   ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
-
-  # 1. Intenta cargar primero la BBDD Excel Estandarizada
   if os.path.exists(ruta_excel_local):
     try:
       df = pd.read_excel(ruta_excel_local)
 
-      # Asegurar tipos de datos para los cálculos del tablero
       if 'Fecha' in df.columns:
         df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
         df['Mes_Reporte'] = df['Fecha_DT'].apply(
-            lambda x: (
-                f"{x.year} - {MESES_ES.get(x.month, '')}"
-                if pd.notnull(x)
-                else 'Sin Fecha'
-            )
+            lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
         )
 
-      # Asegurar columna de ID Único para contar participantes
       if 'ID_Unico' not in df.columns:
         if 'CodigoID' in df.columns and df['CodigoID'].notna().any():
           df['ID_Unico'] = df['CodigoID']
@@ -604,7 +503,6 @@ def cargar_datos_principales():
         else:
           df['ID_Unico'] = df.index.astype(str)
 
-      # Mapear rango etario si la edad existe
       if 'Grupo_Demografico' not in df.columns and 'Edad' in df.columns:
         df['Grupo_Demografico'] = df.apply(
             lambda r: (
@@ -615,31 +513,19 @@ def cargar_datos_principales():
             axis=1,
         )
 
-      # Normalización de Indicadores_Codigos si viene de Excel
       if 'Indicadores_resultados' in df.columns:
-        df['Indicadores_Codigos'] = (
-            df['Indicadores_resultados'].astype(str).str.split()
-        )
+        df['Indicadores_Codigos'] = df['Indicadores_resultados'].astype(str).str.split()
 
       return df
     except Exception as e:
       st.error(f'Error al leer {ruta_excel_local}: {e}')
+  return pd.DataFrame()
 
-  # 2. Si no encuentra el Excel local, consulta la API de KoboToolbox
-  try:
-    KOBO_TOKEN = st.secrets['KOBO_TOKEN']
-    ASSET_ID = st.secrets['ASSET_ID']
-    return cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
-  except Exception:
-    st.info('Carga un archivo local o configura KOBO_TOKEN y ASSET_ID.')
-    return pd.DataFrame()
-
-
+# -----------------------------------------------------------------------------
 # CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP (PQRS)
+# -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def cargar_datos_aap(
-    asset_id_aap, token_aap, kobo_url='https://eu.kobotoolbox.org'
-):
+def cargar_datos_aap(asset_id_aap, token_aap, kobo_url='https://eu.kobotoolbox.org'):
   headers = {'Authorization': f'Token {token_aap}'}
   url = f'{kobo_url}/api/v2/assets/{asset_id_aap}/data.json'
 
@@ -657,48 +543,27 @@ def cargar_datos_aap(
   aap_rows = []
   for r in data:
     canal = extraer_campo_dinamico(r, ['canal'], 'Buzón')
-    tipo_pqrs_raw = extraer_campo_dinamico(
-        r, ['tipo', 'retroalimentacion'], 'Información'
-    )
+    tipo_pqrs_raw = extraer_campo_dinamico(r, ['tipo', 'retroalimentacion'], 'Información')
     estado_caso = extraer_estatus_caso_especifico(r)
     fecha_aap = extraer_fecha_aap(r)
 
-    socio_val = str(
-        r.get('ong')
-        or r.get('socio')
-        or r.get('group_pqrs/socio')
-        or 'COOPI'
-    ).upper().strip()
+    socio_val = str(r.get('ong') or r.get('socio') or r.get('group_pqrs/socio') or 'COOPI').upper().strip()
 
     discapacidad = extraer_valor_booleano(r, ['discapacidad', 'discapaz', 'pcd'])
-    indigena = extraer_valor_booleano(
-        r, ['indigena', 'poblacion_indigena', 'etnia']
-    )
+    indigena = extraer_valor_booleano(r, ['indigena', 'poblacion_indigena', 'etnia'])
     lgbtiq = extraer_valor_booleano(r, ['lgbtiq', 'lgbt', 'poblacion_lgbtiq'])
-    embarazada = extraer_valor_booleano(
-        r, ['embarazada', 'lactante', 'embarazada_o_lactante']
-    )
+    embarazada = extraer_valor_booleano(r, ['embarazada', 'lactante', 'embarazada_o_lactante'])
 
-    sexo_raw = str(
-        r.get('sexo') or r.get('group_pqrs/sexo') or ''
-    ).lower().strip()
+    sexo_raw = str(r.get('sexo') or r.get('group_pqrs/sexo') or '').lower().strip()
     try:
       edad = float(r.get('edad') or r.get('group_pqrs/edad') or 0)
     except (ValueError, TypeError):
       edad = 0
 
-    es_nina = 1 if (
-        (edad < 18 and edad > 0 and sexo_raw in ['femenino', 'f', 'mujer'])
-        or ('niña' in str(r).lower())
-    ) else 0
-    es_nino = 1 if (
-        (edad < 18 and edad > 0 and sexo_raw in ['masculino', 'm', 'hombre'])
-        or ('niño' in str(r).lower())
-    ) else 0
+    es_nina = 1 if ((edad < 18 and edad > 0 and sexo_raw in ['femenino', 'f', 'mujer']) or ('niña' in str(r).lower())) else 0
+    es_nino = 1 if ((edad < 18 and edad > 0 and sexo_raw in ['masculino', 'm', 'hombre']) or ('niño' in str(r).lower())) else 0
 
-    estado_geo_val = extraer_campo_dinamico(
-        r, ['estado_geo', 'group_datos_loc/Estado', 'Estado'], 'General'
-    )
+    estado_geo_val = extraer_campo_dinamico(r, ['estado_geo', 'group_datos_loc/Estado', 'Estado'], 'General')
 
     aap_rows.append({
         '_id': r.get('_id'),
@@ -722,23 +587,18 @@ def cargar_datos_aap(
     df_aap['Fecha_DT'] = pd.to_datetime(df_aap['Fecha'], errors='coerce')
     df_aap = df_aap.sort_values(by='Fecha_DT')
     df_aap['Mes_Reporte'] = df_aap['Fecha_DT'].apply(
-        lambda x: (
-            f"{x.year} - {MESES_ES.get(x.month, '')}"
-            if pd.notnull(x)
-            else 'Sin Fecha'
-        )
+        lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
     )
   else:
     df_aap['Mes_Reporte'] = 'Sin Fecha'
 
   return df_aap
 
-
+# -----------------------------------------------------------------------------
 # CARGA DE DATOS DEL FORMULARIO EVALUACIÓN / INDICADORES AAP (FORM 2)
+# -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def cargar_datos_indicadores_aap(
-    asset_id_ind, token_ind, kobo_url='https://eu.kobotoolbox.org'
-):
+def cargar_datos_indicadores_aap(asset_id_ind, token_ind, kobo_url='https://eu.kobotoolbox.org'):
   headers = {'Authorization': f'Token {token_ind}'}
   url = f'{kobo_url}/api/v2/assets/{asset_id_ind}/data.json'
 
@@ -754,24 +614,17 @@ def cargar_datos_indicadores_aap(
   except Exception:
     return pd.DataFrame()
 
-
-# Asignación del DataFrame principal procesado (Excel Estandarizado / Kobo API)
-df_raw = cargar_datos_principales()
-
-# Cargar datos AAP (PQRS)
-ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
-TOKEN_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
-df_aap_raw = cargar_datos_aap(ASSET_ID_AAP, TOKEN_AAP)
-
-# Cargar datos Indicadores AAP (Nuevo Formulario)
-ASSET_ID_IND_AAP = 'aMYumvwLQ4rQeq5iFDSboS'
-TOKEN_IND_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
-df_eval_aap = cargar_datos_indicadores_aap(ASSET_ID_IND_AAP, TOKEN_IND_AAP)
-
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES
+# 3. FILTROS LATERALES Y SELECTOR DE ORIGEN DE DATOS
 # -----------------------------------------------------------------------------
 st.sidebar.header('Sincronización en Tiempo Real')
+
+# SELECCIÓN DUAL DE ORIGEN DE DATOS
+origen_datos = st.sidebar.radio(
+    "Fuente de Datos Principal:",
+    ("API KoboToolbox (En Vivo)", "BBDD Excel Estandarizada"),
+    index=0
+)
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
@@ -797,7 +650,6 @@ if 'f_grupo_demo' not in st.session_state:
 if 'f_necesidad_esp' not in st.session_state:
   st.session_state.f_necesidad_esp = 'Todos'
 
-
 def borrar_filtros():
   st.session_state.f_mes = 'Todos'
   st.session_state.f_socio = 'Todos'
@@ -808,57 +660,65 @@ def borrar_filtros():
   st.session_state.f_grupo_demo = 'Todos'
   st.session_state.f_necesidad_esp = 'Todos'
 
-
 with col_btn2:
   st.button('🧹 Limpiar Filtros', on_click=borrar_filtros, use_container_width=True)
+
+# CARGA DINÁMICA SEGÚN EL SELECTOR DE ORIGEN
+if origen_datos == "API KoboToolbox (En Vivo)":
+  try:
+    KOBO_TOKEN = st.secrets.get('KOBO_TOKEN', 'a18c017a2e697f4ea1272375dae261ccec6b19d7')
+    ASSET_ID = st.secrets.get('ASSET_ID', 'aRbFg8ig22Ts5JFFvsWNaE')
+    df_raw = cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
+    if df_raw.empty:
+      st.warning("⚠️ No se obtuvieron datos desde la API de KoboToolbox. Intentando cargar BBDD local...")
+      df_raw = cargar_datos_excel_local()
+  except Exception as e:
+    st.error(f"Error consultando Kobo API: {e}")
+    df_raw = cargar_datos_excel_local()
+else:
+  df_raw = cargar_datos_excel_local()
+
+# Cargar datos AAP (PQRS)
+ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
+TOKEN_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
+df_aap_raw = cargar_datos_aap(ASSET_ID_AAP, TOKEN_AAP)
+
+# Cargar datos Indicadores AAP (Nuevo Formulario)
+ASSET_ID_IND_AAP = 'aMYumvwLQ4rQeq5iFDSboS'
+TOKEN_IND_AAP = 'a18c017a2e697f4ea1272375dae261ccec6b19d7'
+df_eval_aap = cargar_datos_indicadores_aap(ASSET_ID_IND_AAP, TOKEN_IND_AAP)
 
 st.sidebar.markdown('---')
 st.sidebar.header('Filtros de Consulta General')
 
 if df_raw.empty:
-  st.warning('No se encontraron registros en el origen de datos.')
+  st.warning('No se encontraron registros en el origen de datos seleccionado.')
   st.stop()
 
-meses_ordenados = sorted(
-    [m for m in df_raw['Mes_Reporte'].unique() if m != 'Sin Fecha']
-)
+meses_ordenados = sorted([m for m in df_raw['Mes_Reporte'].unique() if m != 'Sin Fecha'])
 if 'Sin Fecha' in df_raw['Mes_Reporte'].values:
   meses_ordenados.append('Sin Fecha')
 meses_disp = ['Todos'] + meses_ordenados
 mes_sel = st.sidebar.selectbox('Mes del Reporte:', meses_disp, key='f_mes')
 
-socios_disp = ['Todos'] + sorted(
-    [x for x in df_raw['ONG'].dropna().unique() if x]
-)
+socios_disp = ['Todos'] + sorted([x for x in df_raw['ONG'].dropna().unique() if x])
 socio_sel = st.sidebar.selectbox('Socio / ONG:', socios_disp, key='f_socio')
 
-estados_disp = ['Todos'] + sorted(
-    [x for x in df_raw['Estado'].dropna().unique() if x]
-)
+estados_disp = ['Todos'] + sorted([x for x in df_raw['Estado'].dropna().unique() if x])
 estado_sel = st.sidebar.selectbox('Estado:', estados_disp, key='f_estado')
 
 df_temp = df_raw if estado_sel == 'Todos' else df_raw[df_raw['Estado'] == estado_sel]
-munis_disp = ['Todos'] + sorted(
-    [x for x in df_temp['Municipio'].dropna().unique() if x]
-)
+munis_disp = ['Todos'] + sorted([x for x in df_temp['Municipio'].dropna().unique() if x])
 muni_sel = st.sidebar.selectbox('Municipio:', munis_disp, key='f_muni')
 
-sectores_disp = ['Todos'] + sorted(
-    [x for x in df_raw['Sector'].dropna().unique() if x]
-)
-sector_sel = st.sidebar.selectbox(
-    'Sector de Implementación:', sectores_disp, key='f_sector'
-)
+sectores_disp = ['Todos'] + sorted([x for x in df_raw['Sector'].dropna().unique() if x])
+sector_sel = st.sidebar.selectbox('Sector de Implementación:', sectores_disp, key='f_sector')
 
 sexo_disp = ['Todos', 'Hombre', 'Mujer', 'Otro']
-sexo_sel = st.sidebar.selectbox(
-    'Sexo del Participante:', sexo_disp, key='f_sexo'
-)
+sexo_sel = st.sidebar.selectbox('Sexo del Participante:', sexo_disp, key='f_sexo')
 
 grupo_demo_disp = ['Todos', 'Mujer', 'Hombre', 'Niña', 'Niño']
-grupo_demo_sel = st.sidebar.selectbox(
-    'Grupo Demográfico:', grupo_demo_disp, key='f_grupo_demo'
-)
+grupo_demo_sel = st.sidebar.selectbox('Grupo Demográfico:', grupo_demo_disp, key='f_grupo_demo')
 
 necesidad_esp_disp = [
     'Todos',
@@ -867,9 +727,7 @@ necesidad_esp_disp = [
     'Embarazada / Lactante',
     'Población LGBTIQ+',
 ]
-necesidad_esp_sel = st.sidebar.selectbox(
-    'Necesidad Específica:', necesidad_esp_disp, key='f_necesidad_esp'
-)
+necesidad_esp_sel = st.sidebar.selectbox('Necesidad Específica:', necesidad_esp_disp, key='f_necesidad_esp')
 
 # Aplicar Filtros Generales
 df_filtered = df_raw.copy()
@@ -992,9 +850,7 @@ with col_act1:
   )
 
 with col_act2:
-  sectores_act_list = ['TODOS'] + sorted(
-      list(set(d['Sector'] for d in METAS_ACTIVIDADES.values()))
-  )
+  sectores_act_list = ['TODOS'] + sorted(list(set(d['Sector'] for d in METAS_ACTIVIDADES.values())))
   sector_reporte = st.selectbox(
       'Filtrar por Sector:',
       options=sectores_act_list,
@@ -1003,9 +859,7 @@ with col_act2:
   )
 
 with col_act3:
-  localidades_list = ['TODOS'] + sorted(
-      [x for x in df_filtered['Estado'].dropna().unique() if x]
-  )
+  localidades_list = ['TODOS'] + sorted([x for x in df_filtered['Estado'].dropna().unique() if x])
   localidad_reporte = st.selectbox(
       'Filtrar por Localidad (Estado):',
       options=localidades_list,
@@ -1035,19 +889,11 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
     df_act = df_act_base[
         (df_act_base['ONG'] == socio_reporte)
         & (
-            df_act_base['Actividad'].str.contains(
-                act_nombre, regex=False, case=False, na=False
-            )
-            | df_act_base['Sector'].str.contains(
-                sec, regex=False, case=False, na=False
-            )
+            df_act_base['Actividad'].str.contains(act_nombre, regex=False, case=False, na=False)
+            | df_act_base['Sector'].str.contains(sec, regex=False, case=False, na=False)
         )
     ]
-    alcanzado_val = (
-        df_act['ID_Unico'].nunique()
-        if 'ID_Unico' in df_act.columns
-        else len(df_act)
-    )
+    alcanzado_val = df_act['ID_Unico'].nunique() if 'ID_Unico' in df_act.columns else len(df_act)
     pct = (alcanzado_val / meta_socio * 100) if meta_socio > 0 else 0.0
 
     filas_reporte.append({
@@ -1061,18 +907,10 @@ for act_nombre, datos in METAS_ACTIVIDADES.items():
     })
   else:
     df_act = df_act_base[
-        df_act_base['Actividad'].str.contains(
-            act_nombre, regex=False, case=False, na=False
-        )
-        | df_act_base['Sector'].str.contains(
-            sec, regex=False, case=False, na=False
-        )
+        df_act_base['Actividad'].str.contains(act_nombre, regex=False, case=False, na=False)
+        | df_act_base['Sector'].str.contains(sec, regex=False, case=False, na=False)
     ]
-    alcanzado_val = (
-        df_act['ID_Unico'].nunique()
-        if 'ID_Unico' in df_act.columns
-        else len(df_act)
-    )
+    alcanzado_val = df_act['ID_Unico'].nunique() if 'ID_Unico' in df_act.columns else len(df_act)
     pct = (alcanzado_val / meta_proy * 100) if meta_proy > 0 else 0.0
 
     filas_reporte.append({
@@ -1113,7 +951,6 @@ if not df_reporte_act.empty:
 
   st.markdown('<br>', unsafe_allow_html=True)
 
-  # GRÁFICOS DE BARRAS HORIZONTAL: META (AZUL) Y % AVANCE + ALCANZADOS (MORADO)
   fig_act_bars = make_subplots(specs=[[{'secondary_y': True}]])
 
   fig_act_bars.add_trace(
@@ -1152,9 +989,7 @@ if not df_reporte_act.empty:
       yaxis_title='Actividad',
       font=font_layout,
       height=550,
-      legend=dict(
-          orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1
-      ),
+      legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
   )
 
   fig_act_bars.update_xaxes(title_text='Meta (Servicios / Personas)')
@@ -1163,10 +998,7 @@ if not df_reporte_act.empty:
 
   st.plotly_chart(fig_act_bars, use_container_width=True)
 else:
-  st.info(
-      'No se registraron actividades correspondientes a los filtros'
-      ' seleccionados.'
-  )
+  st.info('No se registraron actividades correspondientes a los filtros seleccionados.')
 
 st.markdown('---')
 
@@ -1178,11 +1010,7 @@ g1, g2 = st.columns(2)
 with g1:
   st.subheader('Desglose por Sexo y Rango Etario (Participantes Únicos)')
   if total_unicos > 0 and 'Grupo_Demografico' in df_unicos.columns:
-    df_demo = (
-        df_unicos.groupby('Grupo_Demografico')
-        .size()
-        .reset_index(name='Cantidad')
-    )
+    df_demo = df_unicos.groupby('Grupo_Demografico').size().reset_index(name='Cantidad')
 
     fig_pie_demo = px.pie(
         df_demo,
@@ -1241,11 +1069,7 @@ m1, m2 = st.columns([1, 1])
 with m1:
   st.markdown('### Participantes Únicos por Municipio')
   if total_unicos > 0 and 'Municipio' in df_unicos.columns:
-    df_muni = (
-        df_unicos.groupby(['Estado', 'Municipio'])
-        .size()
-        .reset_index(name='Participantes_Unicos')
-    )
+    df_muni = df_unicos.groupby(['Estado', 'Municipio']).size().reset_index(name='Participantes_Unicos')
     df_muni['Porcentaje'] = (df_muni['Participantes_Unicos'] / total_unicos) * 100
     df_muni['Etiqueta'] = df_muni.apply(
         lambda r: f"{r['Participantes_Unicos']} ({r['Porcentaje']:.1f}%)", axis=1
@@ -1269,9 +1093,7 @@ with m1:
 with m2:
   st.markdown('### Cobertura de la Intervención')
 
-  mapa = folium.Map(
-      location=[7.8, -65.5], zoom_start=6, tiles='CartoDB positron'
-  )
+  mapa = folium.Map(location=[7.8, -65.5], zoom_start=6, tiles='CartoDB positron')
 
   if total_unicos > 0:
     mapa_df = (
@@ -1280,11 +1102,7 @@ with m2:
         .size()
         .reset_index(name='Cantidad')
     )
-    muni_totales = (
-        df_unicos.groupby(['Estado', 'Municipio'])
-        .size()
-        .reset_index(name='Total_Unicos')
-    )
+    muni_totales = df_unicos.groupby(['Estado', 'Municipio']).size().reset_index(name='Total_Unicos')
 
     for idx, m_row in muni_totales.iterrows():
       est = m_row['Estado']
@@ -1293,14 +1111,9 @@ with m2:
 
       coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
 
-      sectores_muni = mapa_df[
-          (mapa_df['Estado'] == est) & (mapa_df['Municipio'] == mun)
-      ]
+      sectores_muni = mapa_df[(mapa_df['Estado'] == est) & (mapa_df['Municipio'] == mun)]
       sec_html = ''.join([
-          (
-              f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas"
-              ' únicas</li>'
-          )
+          f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas únicas</li>"
           for _, r in sectores_muni.iterrows()
       ])
 
@@ -1368,9 +1181,7 @@ if total_impactados > 0:
       .reset_index()
   )
 
-  summary_ind['Porcentaje_Total'] = (
-      summary_ind['Participantes_Unicos'] / total_unicos
-  ) * 100
+  summary_ind['Porcentaje_Total'] = (summary_ind['Participantes_Unicos'] / total_unicos) * 100
 
   def obtener_meta_info(cod):
     meta_data = METAS_INDICADORES.get(cod)
@@ -1391,21 +1202,15 @@ if total_impactados > 0:
         alcance = (row_ind['Participantes_Unicos'] / valor_meta) * 100
         alcance_porcentajes.append(f'{alcance:.1f}%')
       elif tipo_meta == 'porcentaje':
-        alcance_porcentajes.append(
-            f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})"
-        )
+        alcance_porcentajes.append(f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})")
     else:
       alcance_porcentajes.append('N/A')
 
   summary_ind['Meta del Proyecto'] = meta_etiquetas
   summary_ind['% Alcance del Indicador'] = alcance_porcentajes
-  summary_ind['% del Total'] = summary_ind['Porcentaje_Total'].map(
-      '{:.1f}%'.format
-  )
+  summary_ind['% del Total'] = summary_ind['Porcentaje_Total'].map('{:.1f}%'.format)
 
-  summary_ind = summary_ind.sort_values(
-      by=['Sector', 'Valor_Absoluto'], ascending=[True, False]
-  )
+  summary_ind = summary_ind.sort_values(by=['Sector', 'Valor_Absoluto'], ascending=[True, False])
 
   cols_ordenadas = [
       'Sector',
@@ -1450,17 +1255,10 @@ st.markdown(
     "<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>",
     unsafe_allow_html=True,
 )
-st.caption(
-    'Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio'
-    ' Integras'
-)
+st.caption('Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio Integras')
 
 lista_socios_aap = ['TODOS'] + sorted(
-    list(
-        set(df_aap_raw['Socio'].unique()).union(
-            {'COOPI', 'HIAS', 'FLM', 'PALUZ', 'PLAFAM'}
-        )
-    )
+    list(set(df_aap_raw['Socio'].unique()).union({'COOPI', 'HIAS', 'FLM', 'PALUZ', 'PLAFAM'}))
 )
 lista_poblacion_interes = [
     'TODOS',
@@ -1475,14 +1273,10 @@ lista_poblacion_interes = [
 col_f_aap1, col_f_aap2, col_f_aap3 = st.columns([1.5, 1.5, 1])
 
 with col_f_aap1:
-  socio_aap_sel = st.selectbox(
-      'Filtrar Reporte AAP por Socio:', options=lista_socios_aap, index=0
-  )
+  socio_aap_sel = st.selectbox('Filtrar Reporte AAP por Socio:', options=lista_socios_aap, index=0)
 
 with col_f_aap2:
-  poblacion_sel = st.selectbox(
-      'Población de Interés:', options=lista_poblacion_interes, index=0
-  )
+  poblacion_sel = st.selectbox('Población de Interés:', options=lista_poblacion_interes, index=0)
 
 df_aap_filtered = df_aap_raw.copy()
 
@@ -1507,9 +1301,7 @@ elif poblacion_sel == 'Embarazadas / Lactantes':
 if mes_sel != 'Todos' and 'Mes_Reporte' in df_aap_filtered.columns:
   df_aap_filtered = df_aap_filtered[df_aap_filtered['Mes_Reporte'] == mes_sel]
 if estado_sel != 'Todos' and 'Estado_Geo' in df_aap_filtered.columns:
-  df_aap_filtered = df_aap_filtered[
-      df_aap_filtered['Estado_Geo'] == estado_sel
-  ]
+  df_aap_filtered = df_aap_filtered[df_aap_filtered['Estado_Geo'] == estado_sel]
 
 total_pqrs = len(df_aap_filtered)
 pct_meta_pqrs = (total_pqrs / META_5_PORCIENTO) * 100
@@ -1552,12 +1344,7 @@ with aap_c1:
         color_discrete_sequence=[COLOR_AGUAMARINA],
     )
     fig_canal.update_traces(textposition='outside')
-    fig_canal.update_layout(
-        xaxis_title='Número de PQRS',
-        yaxis_title='',
-        font=font_layout,
-        height=320,
-    )
+    fig_canal.update_layout(xaxis_title='Número de PQRS', yaxis_title='', font=font_layout, height=320)
     st.plotly_chart(fig_canal, use_container_width=True)
   else:
     st.info('No hay datos de canales registrados.')
@@ -1588,11 +1375,7 @@ aap_c3, aap_c4 = st.columns(2)
 with aap_c3:
   st.markdown('### Participantes Atendidos por Mes')
   if total_pqrs > 0 and 'Mes_Reporte' in df_aap_filtered.columns:
-    df_mes_aap = (
-        df_aap_filtered.groupby('Mes_Reporte', sort=False)
-        .size()
-        .reset_index(name='Atendidos')
-    )
+    df_mes_aap = df_aap_filtered.groupby('Mes_Reporte', sort=False).size().reset_index(name='Atendidos')
     df_mes_aap['Porcentaje'] = (df_mes_aap['Atendidos'] / total_pqrs) * 100
     df_mes_aap['Etiqueta'] = df_mes_aap.apply(
         lambda r: f"{r['Atendidos']} ({r['Porcentaje']:.0f}%)", axis=1
@@ -1761,7 +1544,7 @@ if not df_eval_aap.empty:
   with row1_c1:
     st.markdown('### Satisfacción de los participantes')
     sat_col = [c for c in df_eval_filtered.columns if 'satisfac' in c.lower()]
-    
+
     if sat_col and not df_eval_filtered.empty:
       df_sat = df_eval_filtered[sat_col[0]].value_counts().reset_index()
       df_sat.columns = ['Nivel', 'Cantidad']
@@ -1796,7 +1579,7 @@ if not df_eval_aap.empty:
   with row1_c2:
     st.markdown('### Conocimiento del comportamiento esperado')
     comp_col = [c for c in df_eval_filtered.columns if 'comportamiento' in c.lower() or 'esperado' in c.lower()]
-    
+
     if comp_col and not df_eval_filtered.empty:
       df_comp = df_eval_filtered[comp_col[0]].value_counts().reset_index()
       df_comp.columns = ['Respuesta', 'Cantidad']
@@ -1840,7 +1623,7 @@ if not df_eval_aap.empty:
   with row2_c1:
     st.markdown('### Conocimiento del Consorcio y Servicios')
     cons_col = [c for c in df_eval_filtered.columns if 'consorcio' in c.lower() or 'servicio' in c.lower()]
-    
+
     if cons_col and not df_eval_filtered.empty:
       df_cons = df_eval_filtered[cons_col[0]].value_counts().reset_index()
       df_cons.columns = ['Respuesta', 'Cantidad']
@@ -1883,7 +1666,7 @@ if not df_eval_aap.empty:
   with row2_c2:
     st.markdown('### Conocimientos de los canales de retroalimentación')
     ret_col = [c for c in df_eval_filtered.columns if 'canal' in c.lower() or 'retroalimentacion' in c.lower()]
-    
+
     if ret_col and not df_eval_filtered.empty:
       df_ret = df_eval_filtered[ret_col[0]].value_counts().reset_index()
       df_ret.columns = ['Respuesta', 'Cantidad']
