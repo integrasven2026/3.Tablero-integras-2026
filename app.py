@@ -354,7 +354,7 @@ def extraer_fecha_aap(row_dict):
   return None
 
 # -----------------------------------------------------------------------------
-# PROCESAMIENTO ESTÁNDAR DEL DATAFRAME EXCEL
+# PROCESAMIENTO Y LECTURA DE EXCEL SUBIDO POR EL USUARIO
 # -----------------------------------------------------------------------------
 def procesar_dataframe_excel(df):
   if df.empty:
@@ -390,150 +390,13 @@ def procesar_dataframe_excel(df):
   return df
 
 @st.cache_data(ttl=3600)
-def cargar_datos_excel_desde_bytes(file_bytes):
+def cargar_excel_desde_bytes(bytes_data):
   try:
-    df = pd.read_excel(file_bytes)
+    df = pd.read_excel(io.BytesIO(bytes_data))
     return procesar_dataframe_excel(df)
   except Exception as e:
-    st.error(f'Error procesando el archivo subido: {e}')
+    st.error(f"Error al leer el archivo Excel: {e}")
     return pd.DataFrame()
-
-@st.cache_data(ttl=3600)
-def cargar_datos_excel_local():
-  ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
-  if os.path.exists(ruta_excel_local):
-    try:
-      df = pd.read_excel(ruta_excel_local)
-      return procesar_dataframe_excel(df)
-    except Exception as e:
-      st.error(f'Error al leer {ruta_excel_local}. Verifica "openpyxl" en requirements.txt: {e}')
-  return pd.DataFrame()
-
-# -----------------------------------------------------------------------------
-# 2. CARGA DE DATOS DESDE KOBOTOOLBOX API
-# -----------------------------------------------------------------------------
-@st.cache_data(ttl=3600)
-def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
-  headers = {'Authorization': f'Token {token}'}
-  url = f'{kobo_url}/api/v2/assets/{asset_id}/data.json'
-
-  try:
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-      st.error(f'Error al conectar con KoboToolbox API (Código {response.status_code})')
-      return pd.DataFrame()
-
-    data = response.json().get('results', [])
-    if not data:
-      return pd.DataFrame()
-  except Exception as e:
-    st.error(f'Excepción al consultar la API de Kobo: {e}')
-    return pd.DataFrame()
-
-  registros_expandidos = []
-  claves_discapacidad = ['persona_con_discapacidad', 'discapacidad', 'count_discapacidad']
-  claves_indigena = ['poblacion_indigena', 'indigena', 'count_indigena']
-  claves_embarazada = ['embarazada', 'lactante', 'embarazada_o_lactante', 'count_embarazada']
-  claves_lgbtiq = ['poblacion_lgbtiq', 'lgbtiq', 'count_lgbtiq']
-
-  for row in data:
-    sector_raw = str(row.get('Resultado') or row.get('group_datos_act/Resultado') or '').strip()
-    sector_map = {'R1': 'Protección', 'R2': 'Salud', 'R3': 'Nutrición', 'R4': 'WASH', 'R5': 'Respuesta a Emergencia'}
-    sector_label = sector_map.get(sector_raw, sector_raw)
-
-    estado_code = str(row.get('Estado') or row.get('group_datos_loc/Estado') or '').strip()
-    estado_label = MAPA_ESTADOS.get(estado_code, estado_code)
-
-    muni_code = str(row.get('Municipio') or row.get('group_datos_loc/Municipio') or '').strip()
-    muni_label = MAPA_MUNICIPIOS.get(muni_code, muni_code)
-
-    fecha_act = row.get('Fecha_de_la_Actividad') or row.get('group_datos_act/Fecha_de_la_Actividad') or row.get('_submission_time')
-    ind_val = row.get('Indicadores_resultados') or row.get('group_datos_act/Indicadores_resultados') or ''
-    indicadores_raw = str(ind_val).split()
-    indicadores_labels = [MAPA_INDICADORES.get(ind, ind) for ind in indicadores_raw if ind]
-    ong_val = str(row.get('ong') or row.get('group_datos_act/ong') or 'COOPI').upper().strip()
-
-    base_info = {
-        '_id': row.get('_id'),
-        'Fecha': fecha_act,
-        'Estado': estado_label,
-        'Municipio': muni_label,
-        'Comunidad': row.get('Comunidad') or row.get('group_datos_loc/Comunidad'),
-        'ONG': ong_val,
-        'Sector': sector_label,
-        'Actividad': str(row.get('Actividad') or row.get('group_datos_act/Actividad') or 'General').strip(),
-        'Indicadores_Codigos': indicadores_raw,
-        'Indicadores_Texto': ' | '.join(indicadores_labels) if indicadores_labels else 'Sin indicador',
-    }
-
-    beneficiarios = row.get('group_beneficiario', [])
-    if isinstance(beneficiarios, list) and len(beneficiarios) > 0:
-      for idx_b, b in enumerate(beneficiarios):
-        b_info = base_info.copy()
-        cid = str(b.get('group_beneficiario/CodigoID', '')).strip()
-        doc = str(b.get('group_beneficiario/N_de_Documento_de_Identidad', '')).strip()
-
-        b_info['Nombre'] = str(b.get('group_beneficiario/Nombre', '')).strip()
-        b_info['Apellido'] = str(b.get('group_beneficiario/Apellido', '')).strip()
-        b_info['Documento'] = doc
-        b_info['CodigoID'] = cid
-
-        if cid and cid.lower() not in ['none', 'null', '', '0', 'n/a']:
-          b_info['ID_Unico'] = cid
-        elif doc and doc.lower() not in ['none', 'null', '', '0', 'n/a']:
-          b_info['ID_Unico'] = f'DOC_{doc}'
-        else:
-          b_info['ID_Unico'] = f"REG_{row.get('_id')}_{idx_b}"
-
-        sexo_raw = str(b.get('group_beneficiario/Sexo', '')).lower().strip()
-        if sexo_raw in ['femenino', 'f', 'mujer']:
-          sexo_norm = 'Mujer'
-        elif sexo_raw in ['masculino', 'm', 'hombre']:
-          sexo_norm = 'Hombre'
-        else:
-          sexo_norm = 'Otro'
-
-        b_info['Sexo'] = sexo_norm
-
-        try:
-          edad = float(b.get('group_beneficiario/edad_', 0))
-        except (ValueError, TypeError):
-          edad = 0
-        b_info['Edad'] = edad
-
-        if edad < 18:
-          b_info['Grupo_Demografico'] = 'Niña' if sexo_norm == 'Mujer' else 'Niño'
-        else:
-          b_info['Grupo_Demografico'] = 'Mujer' if sexo_norm == 'Mujer' else 'Hombre'
-
-        b_info['Es_Discapacidad'] = extraer_valor_booleano(b, claves_discapacidad)
-        b_info['Es_Indigena'] = extraer_valor_booleano(b, claves_indigena)
-        b_info['Es_Embarazada_Lactante'] = extraer_valor_booleano(b, claves_embarazada)
-        lgbtiq_kobo = extraer_valor_booleano(b, claves_lgbtiq)
-        b_info['Es_LGBTIQ'] = 1 if (lgbtiq_kobo == 1 or sexo_norm == 'Otro') else 0
-
-        registros_expandidos.append(b_info)
-    else:
-      base_info['CodigoID'] = f"ROW_{row.get('_id')}"
-      base_info['ID_Unico'] = f"ROW_{row.get('_id')}"
-      base_info['Sexo'] = 'Otro'
-      base_info['Es_Discapacidad'] = 0
-      base_info['Es_Indigena'] = 0
-      base_info['Es_Embarazada_Lactante'] = 0
-      base_info['Es_LGBTIQ'] = 1
-      registros_expandidos.append(base_info)
-
-  df = pd.DataFrame(registros_expandidos)
-
-  if not df.empty and 'Fecha' in df.columns:
-    df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
-    df['Mes_Reporte'] = df['Fecha_DT'].apply(
-        lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
-    )
-  else:
-    df['Mes_Reporte'] = 'Sin Fecha'
-
-  return df
 
 # -----------------------------------------------------------------------------
 # CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP (PQRS)
@@ -629,15 +492,9 @@ def cargar_datos_indicadores_aap(asset_id_ind, token_ind, kobo_url='https://eu.k
     return pd.DataFrame()
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES Y SELECTOR DE ORIGEN DE DATOS
+# 3. FILTROS LATERALES Y CARGADOR DE ARCHIVO
 # -----------------------------------------------------------------------------
-st.sidebar.header('Sincronización en Tiempo Real')
-
-origen_datos = st.sidebar.radio(
-    "Fuente de Datos Principal:",
-    ("API KoboToolbox (En Vivo)", "BBDD Excel Estandarizada"),
-    index=0
-)
+st.sidebar.header('Sincronización de Base de Datos')
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
@@ -676,25 +533,27 @@ def borrar_filtros():
 with col_btn2:
   st.button('🧹 Limpiar Filtros', on_click=borrar_filtros, use_container_width=True)
 
-# CARGA DINÁMICA SEGÚN EL SELECTOR DE ORIGEN
-if origen_datos == "API KoboToolbox (En Vivo)":
+st.sidebar.markdown('---')
+st.sidebar.subheader('Subir Base de Datos Excel')
+
+archivo_subido = st.sidebar.file_uploader(
+    'Selecciona la base de datos (.xlsx):',
+    type=['xlsx', 'xls']
+)
+
+# Buscar archivo local por defecto si no se sube ninguno en la sesión
+ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
+
+if archivo_subido is not None:
+  df_raw = cargar_excel_desde_bytes(archivo_subido.getvalue())
+elif os.path.exists(ruta_excel_local):
   try:
-    KOBO_TOKEN = st.secrets.get('KOBO_TOKEN', 'a18c017a2e697f4ea1272375dae261ccec6b19d7')
-    ASSET_ID = st.secrets.get('ASSET_ID', 'aRbFg8ig22Ts5JFFvsWNaE')
-    df_raw = cargar_datos_kobo(ASSET_ID, KOBO_TOKEN)
-    if df_raw.empty:
-      st.warning("⚠️ No se obtuvieron datos desde la API de KoboToolbox. Intentando cargar BBDD local...")
-      df_raw = cargar_datos_excel_local()
-  except Exception as e:
-    st.error(f"Error consultando Kobo API: {e}")
-    df_raw = cargar_datos_excel_local()
+    with open(ruta_excel_local, 'rb') as f:
+      df_raw = cargar_excel_desde_bytes(f.read())
+  except Exception:
+    df_raw = pd.DataFrame()
 else:
-  df_raw = cargar_datos_excel_local()
-  if df_raw.empty:
-    st.sidebar.warning("📁 No se encontró 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx' en el servidor.")
-    archivo_subido = st.sidebar.file_uploader("Cargar Excel manualmente:", type=['xlsx', 'xls'])
-    if archivo_subido is not None:
-      df_raw = cargar_datos_excel_desde_bytes(archivo_subido)
+  df_raw = pd.DataFrame()
 
 # Cargar datos AAP (PQRS)
 ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
@@ -710,7 +569,7 @@ st.sidebar.markdown('---')
 st.sidebar.header('Filtros de Consulta General')
 
 if df_raw.empty:
-  st.warning('No se encontraron registros en el origen de datos seleccionado. Por favor, selecciona Kobo API o sube un archivo Excel en el menú lateral.')
+  st.info('👉 Por favor, sube la base de datos Excel utilizando el cargador situado en el menú lateral para activar el tablero.')
   st.stop()
 
 meses_ordenados = sorted([m for m in df_raw['Mes_Reporte'].unique() if m != 'Sin Fecha'])
