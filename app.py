@@ -377,7 +377,7 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
     fecha_act = (
         row.get('Fecha_de_la_Actividad')
         or row.get('group_datos_act/Fecha_de_la_Actividad')
-        抓 or row.get('_submission_time')
+        or row.get('_submission_time')
     )
 
     ind_val = (
@@ -1245,7 +1245,7 @@ if total_impactados > 0:
 st.markdown('---')
 
 # -----------------------------------------------------------------------------
-# 10. REPORTE AAP (RENDICIÓN DE CUENTAS / PQRS) - RESTAURADO COMPLETO
+# 10. REPORTE AAP (RENDICIÓN DE CUENTAS / PQRS)
 # -----------------------------------------------------------------------------
 st.markdown(
     "<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>",
@@ -1436,7 +1436,7 @@ with aap_c4:
 st.markdown('---')
 
 # -----------------------------------------------------------------------------
-# 11. SECCIÓN: INDICADORES AAP (FORMULARIO KOBO IND) - RESTAURADO COMPLETO
+# 11. SECCIÓN: INDICADORES AAP (FORMULARIO KOBO IND)
 # -----------------------------------------------------------------------------
 st.markdown(
     "<h2 class='titulo-indicadores-aap'>4. Indicadores AAP</h2>",
