@@ -354,7 +354,7 @@ def extraer_fecha_aap(row_dict):
   return None
 
 # -----------------------------------------------------------------------------
-# PROCESAMIENTO Y LECTURA DE EXCEL SUBIDO POR EL USUARIO
+# CARGA DESDE GITHUB EN TIEMPO REAL
 # -----------------------------------------------------------------------------
 def procesar_dataframe_excel(df):
   if df.empty:
@@ -389,13 +389,19 @@ def procesar_dataframe_excel(df):
 
   return df
 
-@st.cache_data(ttl=3600)
-def cargar_excel_desde_bytes(bytes_data):
+@st.cache_data(ttl=300)  # Caché corto (5 minutos) para detectar actualizaciones frecuentes en GitHub
+def cargar_datos_desde_github():
+  url_github = 'https://raw.githubusercontent.com/integrasven2026/3.Tablero-integras-2026/main/BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
   try:
-    df = pd.read_excel(io.BytesIO(bytes_data))
-    return procesar_dataframe_excel(df)
+    response = requests.get(url_github)
+    if response.status_code == 200:
+      df = pd.read_excel(io.BytesIO(response.content))
+      return procesar_dataframe_excel(df)
+    else:
+      st.error(f'No se pudo descargar la base de datos de GitHub (Código {response.status_code}).')
+      return pd.DataFrame()
   except Exception as e:
-    st.error(f"Error al leer el archivo Excel: {e}")
+    st.error(f'Error de conexión con GitHub: {e}')
     return pd.DataFrame()
 
 # -----------------------------------------------------------------------------
@@ -492,9 +498,9 @@ def cargar_datos_indicadores_aap(asset_id_ind, token_ind, kobo_url='https://eu.k
     return pd.DataFrame()
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES Y CARGADOR DE ARCHIVO
+# 3. FILTROS LATERALES
 # -----------------------------------------------------------------------------
-st.sidebar.header('Sincronización de Base de Datos')
+st.sidebar.header('Sincronización con GitHub')
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
@@ -533,27 +539,8 @@ def borrar_filtros():
 with col_btn2:
   st.button('🧹 Limpiar Filtros', on_click=borrar_filtros, use_container_width=True)
 
-st.sidebar.markdown('---')
-st.sidebar.subheader('Subir Base de Datos Excel')
-
-archivo_subido = st.sidebar.file_uploader(
-    'Selecciona la base de datos (.xlsx):',
-    type=['xlsx', 'xls']
-)
-
-# Buscar archivo local por defecto si no se sube ninguno en la sesión
-ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
-
-if archivo_subido is not None:
-  df_raw = cargar_excel_desde_bytes(archivo_subido.getvalue())
-elif os.path.exists(ruta_excel_local):
-  try:
-    with open(ruta_excel_local, 'rb') as f:
-      df_raw = cargar_excel_desde_bytes(f.read())
-  except Exception:
-    df_raw = pd.DataFrame()
-else:
-  df_raw = pd.DataFrame()
+# LECTURA DE LA BASE DE DATOS EN TIEMPO REAL DESDE GITHUB
+df_raw = cargar_datos_desde_github()
 
 # Cargar datos AAP (PQRS)
 ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
@@ -569,7 +556,7 @@ st.sidebar.markdown('---')
 st.sidebar.header('Filtros de Consulta General')
 
 if df_raw.empty:
-  st.info('👉 Por favor, sube la base de datos Excel utilizando el cargador situado en el menú lateral para activar el tablero.')
+  st.warning('No se pudo cargar la base de datos desde GitHub. Verifica que el archivo BBDD_INTEGRAS_ESTANDARIZADA.xlsx esté subido correctamente a tu repositorio.')
   st.stop()
 
 meses_ordenados = sorted([m for m in df_raw['Mes_Reporte'].unique() if m != 'Sin Fecha'])
