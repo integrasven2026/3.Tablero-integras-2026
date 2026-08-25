@@ -354,6 +354,62 @@ def extraer_fecha_aap(row_dict):
   return None
 
 # -----------------------------------------------------------------------------
+# PROCESAMIENTO ESTÁNDAR DEL DATAFRAME EXCEL
+# -----------------------------------------------------------------------------
+def procesar_dataframe_excel(df):
+  if df.empty:
+    return df
+
+  if 'Fecha' in df.columns:
+    df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
+    df['Mes_Reporte'] = df['Fecha_DT'].apply(
+        lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
+    )
+
+  if 'ID_Unico' not in df.columns:
+    if 'CodigoID' in df.columns and df['CodigoID'].notna().any():
+      df['ID_Unico'] = df['CodigoID']
+    elif 'Documento' in df.columns and df['Documento'].notna().any():
+      df['ID_Unico'] = 'DOC_' + df['Documento'].astype(str)
+    else:
+      df['ID_Unico'] = df.index.astype(str)
+
+  if 'Grupo_Demografico' not in df.columns and 'Edad' in df.columns:
+    df['Grupo_Demografico'] = df.apply(
+        lambda r: (
+            ('Niña' if r['Sexo'] == 'Mujer' else 'Niño')
+            if r['Edad'] < 18
+            else ('Mujer' if r['Sexo'] == 'Mujer' else 'Hombre')
+        ),
+        axis=1,
+    )
+
+  if 'Indicadores_resultados' in df.columns:
+    df['Indicadores_Codigos'] = df['Indicadores_resultados'].astype(str).str.split()
+
+  return df
+
+@st.cache_data(ttl=3600)
+def cargar_datos_excel_desde_bytes(file_bytes):
+  try:
+    df = pd.read_excel(file_bytes)
+    return procesar_dataframe_excel(df)
+  except Exception as e:
+    st.error(f'Error procesando el archivo subido: {e}')
+    return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def cargar_datos_excel_local():
+  ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
+  if os.path.exists(ruta_excel_local):
+    try:
+      df = pd.read_excel(ruta_excel_local)
+      return procesar_dataframe_excel(df)
+    except Exception as e:
+      st.error(f'Error al leer {ruta_excel_local}. Verifica "openpyxl" en requirements.txt: {e}')
+  return pd.DataFrame()
+
+# -----------------------------------------------------------------------------
 # 2. CARGA DE DATOS DESDE KOBOTOOLBOX API
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
@@ -480,48 +536,6 @@ def cargar_datos_kobo(asset_id, token, kobo_url='https://eu.kobotoolbox.org'):
   return df
 
 # -----------------------------------------------------------------------------
-# CARGA DE DATOS DESDE EXCEL LOCAL
-# -----------------------------------------------------------------------------
-@st.cache_data(ttl=3600)
-def cargar_datos_excel_local():
-  ruta_excel_local = 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx'
-  if os.path.exists(ruta_excel_local):
-    try:
-      df = pd.read_excel(ruta_excel_local)
-
-      if 'Fecha' in df.columns:
-        df['Fecha_DT'] = pd.to_datetime(df['Fecha'], errors='coerce')
-        df['Mes_Reporte'] = df['Fecha_DT'].apply(
-            lambda x: f"{x.year} - {MESES_ES.get(x.month, '')}" if pd.notnull(x) else 'Sin Fecha'
-        )
-
-      if 'ID_Unico' not in df.columns:
-        if 'CodigoID' in df.columns and df['CodigoID'].notna().any():
-          df['ID_Unico'] = df['CodigoID']
-        elif 'Documento' in df.columns and df['Documento'].notna().any():
-          df['ID_Unico'] = 'DOC_' + df['Documento'].astype(str)
-        else:
-          df['ID_Unico'] = df.index.astype(str)
-
-      if 'Grupo_Demografico' not in df.columns and 'Edad' in df.columns:
-        df['Grupo_Demografico'] = df.apply(
-            lambda r: (
-                ('Niña' if r['Sexo'] == 'Mujer' else 'Niño')
-                if r['Edad'] < 18
-                else ('Mujer' if r['Sexo'] == 'Mujer' else 'Hombre')
-            ),
-            axis=1,
-        )
-
-      if 'Indicadores_resultados' in df.columns:
-        df['Indicadores_Codigos'] = df['Indicadores_resultados'].astype(str).str.split()
-
-      return df
-    except Exception as e:
-      st.error(f'Error al leer {ruta_excel_local}: {e}')
-  return pd.DataFrame()
-
-# -----------------------------------------------------------------------------
 # CARGA Y BÚSQUEDA DINÁMICA DE CAMPOS KOBO AAP (PQRS)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
@@ -619,7 +633,6 @@ def cargar_datos_indicadores_aap(asset_id_ind, token_ind, kobo_url='https://eu.k
 # -----------------------------------------------------------------------------
 st.sidebar.header('Sincronización en Tiempo Real')
 
-# SELECCIÓN DUAL DE ORIGEN DE DATOS
 origen_datos = st.sidebar.radio(
     "Fuente de Datos Principal:",
     ("API KoboToolbox (En Vivo)", "BBDD Excel Estandarizada"),
@@ -677,6 +690,11 @@ if origen_datos == "API KoboToolbox (En Vivo)":
     df_raw = cargar_datos_excel_local()
 else:
   df_raw = cargar_datos_excel_local()
+  if df_raw.empty:
+    st.sidebar.warning("📁 No se encontró 'BBDD_INTEGRAS_ESTANDARIZADA.xlsx' en el servidor.")
+    archivo_subido = st.sidebar.file_uploader("Cargar Excel manualmente:", type=['xlsx', 'xls'])
+    if archivo_subido is not None:
+      df_raw = cargar_datos_excel_desde_bytes(archivo_subido)
 
 # Cargar datos AAP (PQRS)
 ASSET_ID_AAP = 'aRbFg8ig22Ts5JFFvsWNaE'
@@ -692,7 +710,7 @@ st.sidebar.markdown('---')
 st.sidebar.header('Filtros de Consulta General')
 
 if df_raw.empty:
-  st.warning('No se encontraron registros en el origen de datos seleccionado.')
+  st.warning('No se encontraron registros en el origen de datos seleccionado. Por favor, selecciona Kobo API o sube un archivo Excel en el menú lateral.')
   st.stop()
 
 meses_ordenados = sorted([m for m in df_raw['Mes_Reporte'].unique() if m != 'Sin Fecha'])
