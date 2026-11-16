@@ -303,12 +303,19 @@ def cargar_datos_excel():
         return pd.DataFrame()
 
     try:
-        df = pd.read_excel(archivo, sheet_name='beneficiarios')
+        xl = pd.ExcelFile(archivo)
+        # Buscar la hoja de beneficiarios de forma flexible
+        hoja_objetivo = 'Beneficiario(as)'
+        if hoja_objetivo not in xl.sheet_names:
+            for s in xl.sheet_names:
+                if 'beneficiario' in s.lower():
+                    hoja_objetivo = s
+                    break
+
+        df = pd.read_excel(archivo, sheet_name=hoja_objetivo, header=0)
         return df
     except Exception as e:
-        st.error(
-            f'Error al leer la hoja "beneficiarios" de {archivo}: {e}'
-        )
+        st.error(f'Error al leer el archivo {archivo}: {e}')
         return pd.DataFrame()
 
 
