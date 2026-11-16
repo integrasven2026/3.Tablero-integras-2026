@@ -290,11 +290,10 @@ font_layout = dict(family='Quicksand', size=13)
 
 
 # -----------------------------------------------------------------------------
-# CARGA AUTOMÁTICA DESDE EL NUEVO EXCEL LOCAL (monitoring toll_integras_octubre_2.xlsx)
+# CARGA AUTOMÁTICA DESDE EL EXCEL LOCAL
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_excel():
-    # Se prioriza el archivo actualizado 'monitoring toll_integras_octubre_2.xlsx'
     posibles_archivos = [
         'monitoring toll_integras_octubre_2.xlsx',
         'monitoring toll_integras_octubre.xlsx',
@@ -307,9 +306,9 @@ def cargar_datos_excel():
 
     if not archivo:
         st.error(
-            "⚠️ No se encontró ningún archivo Excel de monitoreo ('monitoring"
-            " toll_integras_octubre_2.xlsx' ni 'monitoring"
-            ' toll_integras_octubre.xlsx') en el repositorio. Por favor,'
+            '⚠️ No se encontró ningún archivo Excel de monitoreo'
+            ' ("monitoring toll_integras_octubre_2.xlsx" ni "monitoring'
+            ' toll_integras_octubre.xlsx") en el repositorio. Por favor,'
             ' asegúrate de que esté subido correctamente.'
         )
         return pd.DataFrame()
