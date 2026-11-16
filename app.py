@@ -304,7 +304,6 @@ def cargar_datos_excel():
 
     try:
         xl = pd.ExcelFile(archivo)
-        # Buscar la hoja de beneficiarios de forma flexible
         hoja_objetivo = 'Beneficiario(as)'
         if hoja_objetivo not in xl.sheet_names:
             for s in xl.sheet_names:
