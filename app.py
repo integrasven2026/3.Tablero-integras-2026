@@ -412,7 +412,7 @@ df_eval_aap = df_raw.copy()
 
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES (SIN BOTÓN DE CARGA DE ARCHIVOS)
+# 3. FILTROS LATERALES (ÚNICO BOTÓN DE ACTUALIZACIÓN)
 # -----------------------------------------------------------------------------
 st.sidebar.header('Sincronización en Tiempo Real')
 
