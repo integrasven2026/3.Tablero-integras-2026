@@ -321,10 +321,8 @@ if df_raw.empty:
 
 # Normalización de columnas y estandarización para asegurar compatibilidad
 def procesar_dataframe_excel(df):
-    # Asegurar nombres de columnas clave estándar
-    cols = {c.lower(): c for c in df.columns}
+    cols = {str(c).lower().strip(): c for c in df.columns}
 
-    # Mapeo flexible de columnas comunes
     if 'ong' not in cols and 'socio' in cols:
         df['ONG'] = df[cols['socio']]
     elif 'ong' in cols:
@@ -362,7 +360,6 @@ def procesar_dataframe_excel(df):
     else:
         df['Edad'] = 0
 
-    # Grupo demográfico
     def calcular_grupo_demo(row):
         edad = row.get('Edad', 0)
         sexo = row.get('Sexo', 'Otro')
@@ -389,13 +386,11 @@ def procesar_dataframe_excel(df):
     else:
         df['Mes_Reporte'] = 'Sin Fecha'
 
-    # Indicadores códigos
     if 'indicadores_resultados' in cols:
         df['Indicadores_Codigos'] = df[cols['indicadores_resultados']].astype(str).apply(lambda x: x.split())
     else:
         df['Indicadores_Codigos'] = [[] for _ in range(len(df))]
 
-    # Banderas de necesidad específica
     for col_necesidad, clave in [
         ('Es_Discapacidad', 'discapacidad'),
         ('Es_Indigena', 'indigena'),
@@ -412,7 +407,6 @@ def procesar_dataframe_excel(df):
 
 df_raw = procesar_dataframe_excel(df_raw)
 
-# Simulación de datos AAP y evaluaciones AAP si no están en el Excel principal
 df_aap_raw = df_raw.copy()
 df_eval_aap = df_raw.copy()
 
@@ -931,4 +925,243 @@ with m2:
             .reset_index(name='Total_Unicos')
         )
 
-        for
+        for idx, m_row in muni_totales.iterrows():
+            est = m_row['Estado']
+            mun = m_row['Municipio']
+            tot = m_row['Total_Unicos']
+
+            coords = COORDENADAS_MUNICIPIOS.get(mun, [7.8, -65.5])
+
+            sectores_muni = mapa_df[
+                (mapa_df['Estado'] == est) & (mapa_df['Municipio'] == mun)
+            ]
+            sec_html = ''.join([
+                (
+                    f"<li><b>{r['Sector']}:</b> {r['Cantidad']} personas"
+                    ' únicas</li>'
+                )
+                for _, r in sectores_muni.iterrows()
+            ])
+
+            popup_content = f"""
+                <div style='font-family: Quicksand, sans-serif; font-weight: 700; font-size: 12px; width: 200px;'>
+                    <h4 style='font-family: Now, Montserrat, sans-serif; margin-bottom: 5px; color: {COLOR_AGUAMARINA};'>{mun}</h4>
+                    <b>Estado:</b> {est}<br>
+                    <b>Participantes Únicos:</b> {tot}<br><br>
+                    <b>Desglose por Sector:</b>
+                    <ul style='margin-top: 5px; padding-left: 15px;'>
+                        {sec_html}
+                    </ul>
+                </div>
+                """
+
+            folium.CircleMarker(
+                location=coords,
+                radius=min(tot * 3, 20) + 6,
+                popup=folium.Popup(popup_content, max_width=250),
+                color=COLOR_AGUAMARINA,
+                fill=True,
+                fill_color=COLOR_AGUAMARINA,
+                fill_opacity=0.7,
+            ).add_to(mapa)
+
+    st_folium(mapa, width=500, height=380)
+
+st.markdown('---')
+
+# -----------------------------------------------------------------------------
+# 9. TABLA DESGLOSE DE INDICADORES DEL PROYECTO
+# -----------------------------------------------------------------------------
+st.subheader('Desglose de Indicadores del Proyecto')
+
+if total_impactados > 0:
+    records_ind = []
+    for idx, row in df_filtered.iterrows():
+        codigos = row.get('Indicadores_Codigos', [])
+        sector_actual = row.get('Sector', 'Sin Sector')
+
+        if isinstance(codigos, list) and len(codigos) > 0:
+            for cod in codigos:
+                records_ind.append({
+                    'Sector': sector_actual,
+                    'Codigo_Ind': cod,
+                    'Indicador': MAPA_INDICADORES.get(cod, cod),
+                    'ID_Unico': row.get('ID_Unico'),
+                })
+        else:
+            records_ind.append({
+                'Sector': sector_actual,
+                'Codigo_Ind': 'SI',
+                'Indicador': f'Sin indicador ({sector_actual})',
+                'ID_Unico': row.get('ID_Unico'),
+            })
+
+    df_ind_flat = pd.DataFrame(records_ind)
+
+    summary_ind = (
+        df_ind_flat.groupby(['Sector', 'Codigo_Ind', 'Indicador'])
+        .agg(
+            Valor_Absoluto=('ID_Unico', 'count'),
+            Participantes_Unicos=('ID_Unico', 'nunique'),
+        )
+        .reset_index()
+    )
+
+    summary_ind['Porcentaje_Total'] = (
+        summary_ind['Participantes_Unicos'] / total_unicos
+    ) * 100
+
+
+    def obtener_meta_info(cod):
+        meta_data = METAS_INDICADORES.get(cod)
+        if meta_data:
+            return meta_data['etiqueta'], meta_data['meta'], meta_data['tipo']
+        return 'N/A', None, 'ninguno'
+
+
+    meta_etiquetas = []
+    alcance_porcentajes = []
+
+    for _, row_ind in summary_ind.iterrows():
+        cod = row_ind['Codigo_Ind']
+        etiqueta_meta, valor_meta, tipo_meta = obtener_meta_info(cod)
+        meta_etiquetas.append(etiqueta_meta)
+
+        if valor_meta and valor_meta > 0:
+            if tipo_meta == 'numero':
+                alcance = (row_ind['Participantes_Unicos'] / valor_meta) * 100
+                alcance_porcentajes.append(f'{alcance:.1f}%')
+            elif tipo_meta == 'porcentaje':
+                alcance_porcentajes.append(
+                    f"{row_ind['Porcentaje_Total']:.1f}% (de {etiqueta_meta})"
+                )
+        else:
+            alcance_porcentajes.append('N/A')
+
+    summary_ind['Meta del Proyecto'] = meta_etiquetas
+    summary_ind['% Alcance del Indicador'] = alcance_porcentajes
+    summary_ind['% del Total'] = summary_ind['Porcentaje_Total'].map(
+        '{:.1f}%'.format
+    )
+
+    summary_ind = summary_ind.sort_values(
+        by=['Sector', 'Valor_Absoluto'], ascending=[True, False]
+    )
+
+    cols_ordenadas = [
+        'Sector',
+        'Indicador',
+        'Valor_Absoluto',
+        '% del Total',
+        'Meta del Proyecto',
+        '% Alcance del Indicador',
+    ]
+
+    df_mostrar = summary_ind[cols_ordenadas].rename(
+        columns={
+            'Sector': 'Sector',
+            'Indicador': 'Indicador del Proyecto',
+            'Valor_Absoluto': 'Valor Absoluto (Servicios)',
+            '% del Total': '% del Total',
+            'Meta del Proyecto': 'Meta del Proyecto',
+            '% Alcance del Indicador': '% Alcance del Indicador',
+        }
+    )
+
+    st.dataframe(df_mostrar, width='stretch', hide_index=True)
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_mostrar.to_excel(writer, index=False, sheet_name='Indicadores')
+    buffer.seek(0)
+
+    st.download_button(
+        label='📥 Descargar Desglose de Indicadores en Excel',
+        data=buffer,
+        file_name='Desglose_Indicadores_Consorcio_Integras.xlsx',
+        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+st.markdown('---')
+
+# -----------------------------------------------------------------------------
+# 10. REPORTE AAP (RENDICIÓN DE CUENTAS / PQRS)
+# -----------------------------------------------------------------------------
+st.markdown(
+    "<h2 class='titulo-aap'>Reporte AAP (Rendición de Cuentas - PQRS)</h2>",
+    unsafe_allow_html=True,
+)
+st.caption(
+    'Sistema de Peticiones, Quejas, Reclamos y Sugerencias del Consorcio'
+    ' Integras'
+)
+
+lista_socios_aap = ['TODOS'] + sorted(
+    list(
+        set(df_aap_raw['ONG'].astype(str).unique()).union(
+            {'COOPI', 'HIAS', 'FLM', 'PALUZ', 'PLAFAM'}
+        )
+    )
+)
+lista_poblacion_interes = [
+    'TODOS',
+    'Personas con Discapacidad',
+    'Niñas',
+    'Niños',
+    'Comunidad Indígena',
+    'LGBTIQ+',
+    'Embarazadas / Lactantes',
+]
+
+col_f_aap1, col_f_aap2, col_f_aap3 = st.columns([1.5, 1.5, 1])
+
+with col_f_aap1:
+    socio_aap_sel = st.selectbox(
+        'Filtrar Reporte AAP por Socio:', options=lista_socios_aap, index=0
+    )
+
+with col_f_aap2:
+    poblacion_sel = st.selectbox(
+        'Población de Interés:', options=lista_poblacion_interes, index=0
+    )
+
+df_aap_filtered = df_aap_raw.copy()
+
+if socio_aap_sel != 'TODOS':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['ONG'] == socio_aap_sel]
+elif socio_sel != 'Todos':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['ONG'] == socio_sel]
+
+if poblacion_sel == 'Personas con Discapacidad':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Es_Discapacidad'] == 1]
+elif poblacion_sel == 'Niñas':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Grupo_Demografico'] == 'Niña']
+elif poblacion_sel == 'Niños':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Grupo_Demografico'] == 'Niño']
+elif poblacion_sel == 'Comunidad Indígena':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Es_Indigena'] == 1]
+elif poblacion_sel == 'LGBTIQ+':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Es_LGBTIQ'] == 1]
+elif poblacion_sel == 'Embarazadas / Lactantes':
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Es_Embarazada_Lactante'] == 1]
+
+if mes_sel != 'Todos' and 'Mes_Reporte' in df_aap_filtered.columns:
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Mes_Reporte'] == mes_sel]
+if estado_sel != 'Todos' and 'Estado' in df_aap_filtered.columns:
+    df_aap_filtered = df_aap_filtered[df_aap_filtered['Estado'] == estado_sel]
+
+total_pqrs = len(df_aap_filtered)
+pct_meta_pqrs = (total_pqrs / META_5_PORCIENTO) * 100
+
+with col_f_aap3:
+    st.metric(
+        label='% Meta PQRS (5% de 32 mil pers.)',
+        value=f'{pct_meta_pqrs:.2f}%',
+        delta=f'{total_pqrs:,} / {int(META_5_PORCIENTO):,} Meta',
+    )
+
+st.markdown('<br>', unsafe_allow_html=True)
+
+col_total_pqrs, _ = st.columns([1, 3])
+with col_total_pqrs:
+    st.metric('Total PQRS', f'{total_pqrs:,}')
