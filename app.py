@@ -290,7 +290,7 @@ font_layout = dict(family='Quicksand', size=13)
 
 
 # -----------------------------------------------------------------------------
-# CARGA DE DATOS DESDE EL EXCEL LOCAL (monitoring toll_integras_octubre.xlsx)
+# CARGA AUTOMÁTICA DESDE EL EXCEL LOCAL (monitoring toll_integras_octubre.xlsx)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_excel():
@@ -319,7 +319,7 @@ if df_raw.empty:
     st.stop()
 
 
-# Normalización de columnas y estandarización para asegurar compatibilidad
+# Normalización de columnas y estandarización
 def procesar_dataframe_excel(df):
     cols = {str(c).lower().strip(): c for c in df.columns}
 
@@ -412,7 +412,7 @@ df_eval_aap = df_raw.copy()
 
 
 # -----------------------------------------------------------------------------
-# 3. FILTROS LATERALES
+# 3. FILTROS LATERALES (SIN BOTÓN DE CARGA DE ARCHIVOS)
 # -----------------------------------------------------------------------------
 st.sidebar.header('Sincronización en Tiempo Real')
 
