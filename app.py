@@ -290,11 +290,12 @@ font_layout = dict(family='Quicksand', size=13)
 
 
 # -----------------------------------------------------------------------------
-# CARGA AUTOMÁTICA DESDE EL EXCEL LOCAL
+# CARGA AUTOMÁTICA DESDE LA NUEVA BASE DE DATOS OFICIAL
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def cargar_datos_excel():
     posibles_archivos = [
+        '03. BBDD INTEGRAS SIGA OCTUBRE 2026 BASES_V2.xlsx',
         'monitoring toll_integras_octubre_2.xlsx',
         'monitoring toll_integras_octubre.xlsx',
     ]
@@ -306,34 +307,46 @@ def cargar_datos_excel():
 
     if not archivo:
         st.error(
-            '⚠️ No se encontró ningún archivo Excel de monitoreo'
-            ' ("monitoring toll_integras_octubre_2.xlsx" ni "monitoring'
-            ' toll_integras_octubre.xlsx") en el repositorio. Por favor,'
-            ' asegúrate de que esté subido correctamente.'
+            '⚠️ No se encontró ningún archivo Excel de base de datos en el'
+            ' repositorio. Por favor, asegúrate de que esté subido correctamente.'
         )
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     try:
         xl = pd.ExcelFile(archivo)
-        hoja_objetivo = 'Beneficiario(as)'
-        if hoja_objetivo not in xl.sheet_names:
+        
+        # Intentar localizar la hoja de beneficiarios o sistema integral
+        hoja_detalle = 'Beneficiario(as)'
+        if hoja_detalle not in xl.sheet_names:
             for s in xl.sheet_names:
-                if 'beneficiario' in s.lower():
-                    hoja_objetivo = s
+                if 'beneficiario' in s.lower() or 'sistema' in s.lower():
+                    hoja_detalle = s
                     break
 
-        df = pd.read_excel(archivo, sheet_name=hoja_objetivo, header=0)
-        return df
+        df_detalle = pd.read_excel(archivo, sheet_name=hoja_detalle, header=0)
+        
+        # Cargar hoja de acumulados si existe
+        hoja_acum = 'Beneficiario(as)-' if 'Beneficiario(as)-' in xl.sheet_names else xl.sheet_names[0]
+        df_acumulado = pd.read_excel(archivo, sheet_name=hoja_acum, header=None)
+
+        return df_detalle, df_acumulado
     except Exception as e:
         st.error(f'Error al leer el archivo {archivo}: {e}')
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
 
-df_raw = cargar_datos_excel()
+df_raw, df_acum_raw = cargar_datos_excel()
 
 if df_raw.empty:
     st.warning('El DataFrame está vacío o no se pudo cargar la hoja correctamente.')
     st.stop()
+
+
+# Extraer participantes únicos globales si están en la hoja acumulada
+try:
+    total_unicos_oficial = int(df_acum_raw.iloc[8, 31])
+except Exception:
+    total_unicos_oficial = len(df_raw.drop_duplicates(subset=['ID_Unico'])) if 'ID_Unico' in df_raw.columns else len(df_raw)
 
 
 # Normalización de columnas y estandarización
@@ -554,9 +567,9 @@ elif necesidad_esp_sel == 'Población LGBTIQ+':
 # -----------------------------------------------------------------------------
 # 4. MÉTRICAS CLAVE
 # -----------------------------------------------------------------------------
-total_impactados = len(df_filtered)
+total_impactados = len(df_filtered) if len(df_filtered) > 0 else total_unicos_oficial
 df_unicos = df_filtered.drop_duplicates(subset=['ID_Unico'])
-total_unicos = len(df_unicos)
+total_unicos = len(df_unicos) if len(df_filtered) > 0 else total_unicos_oficial
 
 pct_meta = (total_unicos / META_PARTICIPANTES_UNICOS) * 100
 
